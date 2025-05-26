@@ -1,9 +1,10 @@
 import type { User as FirebaseUser } from "firebase/auth";
+import type { Timestamp } from "firebase/firestore";
 
 export interface UserProfile {
-  id: string;
+  id: string; // UID from Firebase Auth
   displayName?: string | null;
-  email?: string | null;
+  email?: string | null; // Should be primary email from Auth
   avatarUrl?: string | null;
   bio?: string;
   skills?: string[];
@@ -12,6 +13,8 @@ export interface UserProfile {
   followerCount?: number;
   followingCount?: number;
   joinedStartups?: string[]; // Array of startup IDs
+  createdAt?: Timestamp; // Firestore Timestamp
+  updatedAt?: Timestamp; // Firestore Timestamp
 }
 
 export interface Post {
@@ -23,19 +26,19 @@ export interface Post {
   imageUrl?: string;
   hashtags?: string[];
   codeSnippet?: { language: string; code: string };
-  createdAt: Date;
+  createdAt: Timestamp; // Firestore Timestamp
   likeCount: number;
   commentCount: number;
 }
 
 export interface Comment {
-  id: string;
+  id:string;
   postId: string;
   authorId: string;
   authorDisplayName?: string;
   authorAvatarUrl?: string;
   text: string;
-  createdAt: Date;
+  createdAt: Timestamp; // Firestore Timestamp
 }
 
 export interface CommunityRoom {
@@ -45,6 +48,7 @@ export interface CommunityRoom {
   memberCount: number;
   topic: string;
   pinnedMessageId?: string;
+  // Messages will be in Realtime Database
 }
 
 export interface Startup {
@@ -56,8 +60,9 @@ export interface Startup {
   techStack?: string[];
   coFounderIds?: string[]; // Array of user IDs
   followerCount?: number;
-  createdAt: Date;
+  createdAt: Timestamp; // Firestore Timestamp
   tags?: string[];
 }
 
+// This type can be used when you have fetched both Firebase Auth user and their Firestore profile
 export type AppUser = FirebaseUser & UserProfile;

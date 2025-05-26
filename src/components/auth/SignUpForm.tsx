@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -5,9 +6,9 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, updateProfile } from "firebase/auth";
-import { auth } from "@/lib/firebase"; // Assuming db is also exported for profile creation
-// import { doc, setDoc } from "firebase/firestore"; // For creating user profile doc
+import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, updateProfile, UserCredential } from "firebase/auth";
+import { auth, db } from "@/lib/firebase";
+import { doc, setDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -22,6 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import type { UserProfile } from "@/types";
 
 const formSchema = z.object({
   displayName: z.string().min(2, { message: "Display name must be at least 2 characters." }),
@@ -44,14 +46,50 @@ export function SignUpForm() {
     },
   });
 
+  const createUserProfileDocument = async (userCredential: UserCredential, additionalData?: Partial<UserProfile>) => {
+    if (!userCredential.user) return;
+    const userRef = doc(db, "users", userCredential.user.uid);
+    
+    // Check if document already exists (e.g. for Google Sign In)
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+      const { displayName, email, photoURL } = userCredential.user;
+      const profileData: UserProfile = {
+        id: userCredential.user.uid,
+        displayName: additionalData?.displayName || displayName,
+        email: email,
+        avatarUrl: additionalData?.avatarUrl || photoURL,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        bio: "",
+        skills: [],
+        preferredLanguages: [],
+        externalLinks: [],
+        followerCount: 0,
+        followingCount: 0,
+        joinedStartups: [],
+        ...additionalData,
+      };
+      try {
+        await setDoc(userRef, profileData);
+      } catch (error) {
+        console.error("Error creating user profile document:", error);
+        toast({
+          title: "Profile Creation Failed",
+          description: "Could not save your profile information.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
       await updateProfile(userCredential.user, { displayName: values.displayName });
-      
-      // TODO: Create user profile document in Firestore
-      // Example: await setDoc(doc(db, "users", userCredential.user.uid), { ... });
+      await createUserProfileDocument(userCredential, { displayName: values.displayName });
 
       toast({ title: "Account created successfully!" });
       router.push("/");
@@ -72,7 +110,7 @@ export function SignUpForm() {
     const provider = new GoogleAuthProvider();
     try {
       const userCredential = await signInWithPopup(auth, provider);
-      // TODO: Check if user exists in Firestore, if not, create profile
+      await createUserProfileDocument(userCredential);
       toast({ title: "Signed up with Google successfully!" });
       router.push("/");
     } catch (error: any) {
@@ -86,7 +124,6 @@ export function SignUpForm() {
       setIsGoogleLoading(false);
     }
   }
-
 
   return (
     <Card>

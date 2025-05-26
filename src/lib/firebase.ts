@@ -1,31 +1,28 @@
-import { initializeApp, getApps, FirebaseApp } from "firebase/app";
+import { initializeApp, getApps, FirebaseApp, deleteApp } from "firebase/app";
 import { getAuth, Auth } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
+import { getDatabase, Database } from "firebase/database"; // Added for Realtime Database
 import { firebaseConfig } from "./firebaseConfig";
 
 let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
+let rtdb: Database; // Added for Realtime Database
 
-if (typeof window !== "undefined" && !getApps().length) {
+// To prevent reinitialization errors during HMR in Next.js development
+if (process.env.NODE_ENV === 'development' && getApps().length) {
+  // Consider if app deletion is truly needed or if just getting the existing app is sufficient
+  // deleteApp(getApps()[0]); 
+}
+
+if (getApps().length === 0) {
   app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = getFirestore(app);
-} else if (getApps().length > 0) {
+} else {
   app = getApps()[0]!;
-  auth = getAuth(app);
-  db = getFirestore(app);
 }
 
-// Ensure auth and db are assigned for server-side contexts if needed,
-// though client-side initialization is primary for this setup.
-// For server components, you'd use Firebase Admin SDK.
-// This setup is primarily for client-side Firebase usage.
-if (!auth!) {
-  const tempApp = initializeApp(firebaseConfig); // Temporary for environments where getApps might be tricky
-  auth = getAuth(tempApp);
-  db = getFirestore(tempApp);
-}
+auth = getAuth(app);
+db = getFirestore(app);
+rtdb = getDatabase(app); // Initialize Realtime Database
 
-
-export { app, auth, db };
+export { app, auth, db, rtdb };

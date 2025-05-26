@@ -1,60 +1,63 @@
-"use client"; // This page needs client-side hooks for auth state
+
+"use client";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProfileDisplay } from "@/components/profile/ProfileDisplay";
 import type { UserProfile } from "@/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { use } from 'react';
-
-// Mock data for demonstration
-const mockUserProfile: UserProfile = {
-  id: "user123",
-  displayName: "Alice W.",
-  email: "alice@example.com",
-  avatarUrl: "https://placehold.co/200x200.png",
-  bio: "Full-stack developer passionate about creating intuitive user experiences and exploring new technologies. Currently diving deep into AI and Web3. Always open to collaboration on exciting projects!",
-  skills: ["JavaScript", "React", "Node.js", "Python", "AI/ML", "Solidity"],
-  preferredLanguages: ["English", "Spanish"],
-  externalLinks: [
-    { name: "GitHub", url: "https://github.com" },
-    { name: "LinkedIn", url: "https://linkedin.com" },
-    { name: "Personal Portfolio", url: "https://example.com" },
-  ],
-  followerCount: 150,
-  followingCount: 75,
-  joinedStartups: ["startup1", "startup3"],
-};
-
+import { use, useEffect, useState } from 'react';
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 interface ProfilePageProps {
   params: { userId: string };
 }
 
-// Since metadata cannot be dynamic with "use client", we'll set a generic one in layout or keep it simple.
-// export const metadata: Metadata = {
-//   title: 'User Profile | DevNet',
-// };
-
 export default function ProfilePage({ params: paramsFromProps }: ProfilePageProps) {
-  const params = use(paramsFromProps);
+  const params = use(paramsFromProps); // Unwrap promise for params
   const { user: currentUser, loading: authLoading } = useAuth();
+  const { toast } = useToast();
   
-  // In a real app, you would fetch profile data based on params.userId
-  // For now, we use mock data. If params.userId matches current user, show current user's mock.
-  const profileData = params.userId === currentUser?.uid ? { ...mockUserProfile, ...currentUser, id: currentUser.uid } : { ...mockUserProfile, id: params.userId };
-  const isLoadingProfile = false; // Replace with actual profile loading state
+  const [profileData, setProfileData] = useState<UserProfile | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+  useEffect(() => {
+    if (params.userId) {
+      setIsLoadingProfile(true);
+      const fetchProfile = async () => {
+        try {
+          const userRef = doc(db, "users", params.userId);
+          const docSnap = await getDoc(userRef);
+          if (docSnap.exists()) {
+            setProfileData({ id: docSnap.id, ...docSnap.data() } as UserProfile);
+          } else {
+            toast({ title: "Profile not found", description: "This user profile does not exist.", variant: "destructive" });
+            setProfileData(null);
+          }
+        } catch (error) {
+          console.error("Error fetching profile:", error);
+          toast({ title: "Error", description: "Could not fetch user profile.", variant: "destructive" });
+          setProfileData(null);
+        } finally {
+          setIsLoadingProfile(false);
+        }
+      };
+      fetchProfile();
+    }
+  }, [params.userId, toast]);
 
   if (authLoading || isLoadingProfile) {
     return (
       <AppLayout>
         <div className="container mx-auto max-w-3xl py-8">
-          <Skeleton className="h-48 w-full mb-6" />
-          <Skeleton className="h-24 w-full mb-4" />
-          <Skeleton className="h-24 w-full" />
+          <div className="flex justify-center items-center min-h-[300px]">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          </div>
         </div>
       </AppLayout>
     );
@@ -64,7 +67,13 @@ export default function ProfilePage({ params: paramsFromProps }: ProfilePageProp
     return (
       <AppLayout>
         <div className="container mx-auto py-8 text-center">
-          <p>User profile not found.</p>
+          <p className="text-xl text-muted-foreground">User profile not found.</p>
+          <Button variant="link" asChild className="mt-4">
+            <Link href="/">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Feed
+            </Link>
+          </Button>
         </div>
       </AppLayout>
     );
@@ -74,7 +83,7 @@ export default function ProfilePage({ params: paramsFromProps }: ProfilePageProp
     <AppLayout>
       <div className="container mx-auto max-w-3xl py-4">
          <Button variant="ghost" asChild className="mb-6">
-          <Link href="/"> {/* Or back to previous page */}
+          <Link href="/">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Link>
