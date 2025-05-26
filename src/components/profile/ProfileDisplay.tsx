@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import type { UserProfile } from "@/types";
-import { Mail, Link as LinkIcon, Briefcase, Languages, Users, UserCheck, Edit3 } from "lucide-react";
+import { Mail, Link as LinkIcon, Briefcase, Languages, Users, UserCheck, Edit3, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
 interface ProfileDisplayProps {
