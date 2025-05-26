@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -7,13 +8,14 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
-import { Home, Rocket, MessageSquare, Users, UserCircle, Settings } from "lucide-react";
+import { Home, Rocket, MessageSquare as RoomIcon, Users, UserCircle, Settings, MessagesSquare } from "lucide-react"; // Changed MessageSquare to RoomIcon for clarity
 import { useAuth } from "@/providers/AuthProvider";
 
 const navItems = [
   { href: "/", label: "Feed", icon: Home },
   { href: "/startups", label: "Startups", icon: Rocket },
-  { href: "/rooms", label: "Rooms", icon: MessageSquare },
+  { href: "/rooms", label: "Rooms", icon: RoomIcon },
+  { href: "/messages", label: "Messages", icon: MessagesSquare, requireAuth: true }, // New Messages Link
 ];
 
 const userNavItems = (userId?: string) => [
@@ -28,7 +30,12 @@ export function SidebarNavItems() {
 
   const allItems = [...navItems];
   if (user) {
-    allItems.push(...userNavItems(user.uid));
+    // Add user-specific items that are not already in general nav
+    userNavItems(user.uid).forEach(userItem => {
+      if (!allItems.find(item => item.href === userItem.href && item.requireAuth)) {
+        allItems.push(userItem);
+      }
+    });
   }
 
 
@@ -37,13 +44,15 @@ export function SidebarNavItems() {
       {allItems.map((item) => {
         if (item.requireAuth && !user) return null;
         
-        const href = item.requireAuth && user ? item.href.replace('[userId]', user.uid) : item.href;
+        const href = item.requireAuth && user && item.href.includes('[userId]') 
+          ? item.href.replace('[userId]', user.uid) 
+          : item.href;
 
         return (
           <SidebarMenuItem key={item.label}>
             <SidebarMenuButton
               asChild
-              isActive={pathname === href}
+              isActive={pathname === href || (href !== "/" && pathname.startsWith(href))} // More robust active check for nested routes
               tooltip={{ children: item.label, side: "right", align: "center" }}
             >
               <Link href={href}>

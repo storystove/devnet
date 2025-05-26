@@ -7,8 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import type { UserProfile } from "@/types";
-import { Mail, Link as LinkIcon, Briefcase, Languages, Users, UserCheck, Edit3, ExternalLink, UserPlus } from "lucide-react";
+import { Mail, Link as LinkIcon, Briefcase, Languages, Users, UserCheck, Edit3, ExternalLink, UserPlus, UserMinus, MessageSquare, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/providers/AuthProvider";
+import { useEffect, useState, useCallback } from "react";
+import { db } from "@/lib/firebase";
+import { doc, getDoc, writeBatch, serverTimestamp, increment, deleteDoc } from "firebase/firestore";
+import { useToast } from "@/hooks/use-toast";
+import { useRouter } from "next/navigation";
 
 interface ProfileDisplayProps {
   profile: UserProfile;
@@ -16,8 +22,118 @@ interface ProfileDisplayProps {
 }
 
 export function ProfileDisplay({ profile, isCurrentUser = false }: ProfileDisplayProps) {
+  const { user: currentUser, loading: authLoading } = useAuth();
+  const { toast } = useToast();
+  const router = useRouter();
+
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
+  const [currentFollowerCount, setCurrentFollowerCount] = useState(profile.followerCount || 0);
+
   const displayName = profile.displayName || profile.email?.split('@')[0] || "User";
   const initials = displayName.charAt(0).toUpperCase();
+
+  const checkFollowStatus = useCallback(async () => {
+    if (!currentUser || !profile || currentUser.uid === profile.id) return;
+    setIsFollowLoading(true);
+    try {
+      const followingRef = doc(db, "users", currentUser.uid, "following", profile.id);
+      const docSnap = await getDoc(followingRef);
+      setIsFollowing(docSnap.exists());
+    } catch (error) {
+      console.error("Error checking follow status:", error);
+    } finally {
+      setIsFollowLoading(false);
+    }
+  }, [currentUser, profile]);
+
+  useEffect(() => {
+    checkFollowStatus();
+  }, [checkFollowStatus]);
+
+  useEffect(() => {
+    setCurrentFollowerCount(profile.followerCount || 0);
+  }, [profile.followerCount]);
+
+
+  const handleFollowToggle = async () => {
+    if (!currentUser || !profile || authLoading) {
+      toast({ title: "Please sign in to follow users.", variant: "destructive" });
+      return;
+    }
+    if (currentUser.uid === profile.id) {
+      toast({ title: "You cannot follow yourself.", variant: "default" });
+      return;
+    }
+
+    setIsFollowLoading(true);
+    const batch = writeBatch(db);
+
+    const currentUserFollowingRef = doc(db, "users", currentUser.uid, "following", profile.id);
+    const targetUserFollowersRef = doc(db, "users", profile.id, "followers", currentUser.uid);
+    const currentUserProfileRef = doc(db, "users", currentUser.uid);
+    const targetUserProfileRef = doc(db, "users", profile.id);
+
+    try {
+      if (isFollowing) { // Unfollow
+        batch.delete(currentUserFollowingRef);
+        batch.delete(targetUserFollowersRef);
+        batch.update(currentUserProfileRef, { 
+          followingCount: increment(-1),
+          updatedAt: serverTimestamp() 
+        });
+        batch.update(targetUserProfileRef, { 
+          followerCount: increment(-1),
+          updatedAt: serverTimestamp()  
+        });
+        await batch.commit();
+        setIsFollowing(false);
+        setCurrentFollowerCount(prev => Math.max(0, prev -1));
+        toast({ title: `Unfollowed ${displayName}` });
+      } else { // Follow
+        batch.set(currentUserFollowingRef, { 
+          userId: profile.id, 
+          displayName: profile.displayName,
+          avatarUrl: profile.avatarUrl,
+          followedAt: serverTimestamp() 
+        });
+        batch.set(targetUserFollowersRef, { 
+          userId: currentUser.uid, 
+          displayName: currentUser.displayName,
+          avatarUrl: currentUser.photoURL,
+          followedAt: serverTimestamp() 
+        });
+        batch.update(currentUserProfileRef, { 
+          followingCount: increment(1),
+          updatedAt: serverTimestamp() 
+        });
+        batch.update(targetUserProfileRef, { 
+          followerCount: increment(1),
+          updatedAt: serverTimestamp()  
+        });
+        await batch.commit();
+        setIsFollowing(true);
+        setCurrentFollowerCount(prev => prev + 1);
+        toast({ title: `Followed ${displayName}` });
+      }
+    } catch (error: any) {
+      console.error("Error following/unfollowing user:", error);
+      toast({ title: "Action Failed", description: error.message || "Could not update follow status.", variant: "destructive" });
+    } finally {
+      setIsFollowLoading(false);
+    }
+  };
+
+  const handleMessage = () => {
+    if (!currentUser || !profile || currentUser.uid === profile.id) {
+      toast({ title: "Cannot message this user.", variant: "destructive" });
+      return;
+    }
+    // Create a unique chat ID (sorted UIDs)
+    const ids = [currentUser.uid, profile.id].sort();
+    const chatId = ids.join('_');
+    router.push(`/messages/${chatId}`);
+  };
 
   return (
     <Card className="shadow-xl">
@@ -35,7 +151,7 @@ export function ProfileDisplay({ profile, isCurrentUser = false }: ProfileDispla
               </p>
             )}
              <div className="mt-3 flex items-center justify-center sm:justify-start gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center"><Users className="mr-1 h-4 w-4" /> {profile.followerCount || 0} Followers</span>
+                <span className="flex items-center"><Users className="mr-1 h-4 w-4" /> {currentFollowerCount} Followers</span>
                 <span className="flex items-center"><UserCheck className="mr-1 h-4 w-4" /> {profile.followingCount || 0} Following</span>
             </div>
           </div>
@@ -89,7 +205,6 @@ export function ProfileDisplay({ profile, isCurrentUser = false }: ProfileDispla
           </div>
         )}
         
-        {/* Placeholder for Joined Startups */}
          <div>
             <h3 className="text-lg font-semibold mb-2">Joined Startups</h3>
             {profile.joinedStartups && profile.joinedStartups.length > 0 ? (
@@ -104,10 +219,30 @@ export function ProfileDisplay({ profile, isCurrentUser = false }: ProfileDispla
          </div>
 
       </CardContent>
-      {!isCurrentUser && (
-         <CardFooter className="border-t p-4">
-            <Button className="w-full sm:w-auto" disabled> {/* Follow functionality not yet implemented */}
-                <UserPlus className="mr-2 h-4 w-4" /> Follow {displayName}
+      {!isCurrentUser && currentUser && (
+         <CardFooter className="border-t p-4 flex flex-col sm:flex-row gap-2">
+            <Button 
+              onClick={handleFollowToggle} 
+              disabled={isFollowLoading || authLoading} 
+              className="w-full sm:w-auto"
+              variant={isFollowing ? "outline" : "default"}
+            >
+              {isFollowLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : isFollowing ? (
+                <UserMinus className="mr-2 h-4 w-4" />
+              ) : (
+                <UserPlus className="mr-2 h-4 w-4" />
+              )}
+              {isFollowing ? "Unfollow" : `Follow`} {displayName}
+            </Button>
+            <Button 
+              onClick={handleMessage} 
+              variant="outline" 
+              className="w-full sm:w-auto"
+              disabled={authLoading}
+            >
+                <MessageSquare className="mr-2 h-4 w-4" /> Message
             </Button>
          </CardFooter>
       )}

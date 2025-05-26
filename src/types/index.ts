@@ -15,13 +15,23 @@ export interface UserProfile {
   joinedStartups?: string[]; // Array of startup IDs
   createdAt?: Timestamp; // Firestore Timestamp
   updatedAt?: Timestamp; // Firestore Timestamp
+  // Added for DM chat list
+  activeChats?: {
+    chatId: string;
+    otherUserId: string;
+    otherUserDisplayName?: string | null;
+    otherUserAvatarUrl?: string | null;
+    lastMessage?: string | null;
+    lastMessageTimestamp?: Timestamp | null;
+    unreadCount?: number;
+  }[];
 }
 
 export interface Post {
   id: string;
   authorId: string;
   authorDisplayName?: string;
-  authorAvatarUrl?: string;
+  authorAvatarUrl?: string | null; // Ensure null is allowed
   text: string;
   imageUrl?: string;
   hashtags?: string[];
@@ -66,3 +76,12 @@ export interface Startup {
 
 // This type can be used when you have fetched both Firebase Auth user and their Firestore profile
 export type AppUser = FirebaseUser & UserProfile;
+
+// For Realtime Database messages
+export interface DirectMessage {
+  id: string; // messageId
+  senderId: string;
+  text: string;
+  timestamp: number; // RTDB typically uses Unix ms timestamp
+  readBy?: { [userId: string]: boolean };
+}
