@@ -5,9 +5,10 @@ import { ProfileDisplay } from "@/components/profile/ProfileDisplay";
 import type { UserProfile } from "@/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, UserPlus } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { use } from 'react';
 
 // Mock data for demonstration
 const mockUserProfile: UserProfile = {
@@ -38,7 +39,8 @@ interface ProfilePageProps {
 //   title: 'User Profile | DevNet',
 // };
 
-export default function ProfilePage({ params }: ProfilePageProps) {
+export default function ProfilePage({ params: paramsFromProps }: ProfilePageProps) {
+  const params = use(paramsFromProps);
   const { user: currentUser, loading: authLoading } = useAuth();
   
   // In a real app, you would fetch profile data based on params.userId
