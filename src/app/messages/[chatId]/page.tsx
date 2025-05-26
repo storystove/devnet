@@ -7,7 +7,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { ArrowLeft, Loader2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react"; // Added use
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { UserProfile } from "@/types";
@@ -17,10 +17,11 @@ interface DirectMessagePageProps {
   params: { chatId: string };
 }
 
-export default function DirectMessagePage({ params }: DirectMessagePageProps) {
+export default function DirectMessagePage({ params: paramsFromProps }: DirectMessagePageProps) {
+  const params = use(paramsFromProps); // Unwrap promise for params
   const { user: currentUser, loading: authLoading } = useAuth();
   const router = useRouter(); // Initialize useRouter
-  const { chatId } = params;
+  const { chatId } = params; // Destructure from resolved params
 
   const [otherUser, setOtherUser] = useState<Partial<UserProfile> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
