@@ -69,9 +69,9 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
       const postData: Omit<Post, "id" | "createdAt"> & { createdAt: Timestamp } = {
         authorId: user.uid,
         authorDisplayName: user.displayName || "Anonymous",
-        authorAvatarUrl: user.photoURL || null, // Ensure null instead of undefined
+        authorAvatarUrl: user.photoURL || null,
         text: data.text,
-        imageUrl: data.imageUrl || undefined,
+        imageUrl: data.imageUrl || undefined, // Ensure undefined if empty string
         hashtags: data.tags || [],
         codeSnippet: data.codeSnippetCode && data.codeSnippetLanguage 
           ? { code: data.codeSnippetCode, language: data.codeSnippetLanguage } 
