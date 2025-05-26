@@ -6,8 +6,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: 'Edit Profile | CollabForge',
-  description: 'Update your CollabForge profile information.',
+  title: 'Edit Profile | DevNet',
+  description: 'Update your DevNet profile information.',
 };
 
 export default function EditProfilePage() {

@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Create Startup | CollabForge',
-  description: 'Showcase your new startup on CollabForge.',
+  title: 'Create Startup | DevNet',
+  description: 'Showcase your new startup on DevNet.',
 };
 
 export default function CreateStartupPage() {

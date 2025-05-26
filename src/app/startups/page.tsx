@@ -3,12 +3,12 @@ import { StartupCard } from "@/components/startups/StartupCard";
 import { Button } from "@/components/ui/button";
 import type { Startup } from "@/types";
 import Link from "next/link";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Rocket } from "lucide-react";
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Startup Showcase | CollabForge',
-  description: 'Discover innovative startups on CollabForge.',
+  title: 'Startup Showcase | DevNet',
+  description: 'Discover innovative startups on DevNet.',
 };
 
 // Mock data for demonstration

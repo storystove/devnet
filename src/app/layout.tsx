@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CollabForge",
-  description: "Forge collaborations, build startups.",
+  title: "DevNet",
+  description: "Forge connections, build projects.",
 };
 
 export default function RootLayout({

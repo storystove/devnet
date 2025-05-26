@@ -28,7 +28,7 @@ export async function generateMetadata({ params }: StartupPageProps): Promise<Me
   // In a real app, fetch startup data here
   const startup = mockStartup; // Using mock data
   return {
-    title: `${startup.name} | CollabForge`,
+    title: `${startup.name} | DevNet`,
     description: startup.description.substring(0,160),
   };
 }

@@ -97,7 +97,7 @@ export function EditProfileForm() {
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle>Edit Your Profile</CardTitle>
-        <CardDescription>Keep your CollabForge profile up-to-date.</CardDescription>
+        <CardDescription>Keep your DevNet profile up-to-date.</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>

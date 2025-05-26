@@ -7,8 +7,8 @@ import { PlusCircle, MessageSquare as MessageSquareIcon } from "lucide-react";
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Community Rooms | CollabForge',
-  description: 'Join discussions and collaborate in community rooms on CollabForge.',
+  title: 'Community Rooms | DevNet',
+  description: 'Join discussions and collaborate in community rooms on DevNet.',
 };
 
 // Mock data for demonstration

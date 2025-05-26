@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: RoomPageProps): Promise<Metad
   // In a real app, fetch room data here
   const room = mockRoom; // Using mock data
   return {
-    title: `${room.name} | CollabForge`,
+    title: `${room.name} | DevNet`,
     description: `Join the conversation in ${room.name} community room.`,
   };
 }

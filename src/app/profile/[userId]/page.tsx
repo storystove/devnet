@@ -5,7 +5,7 @@ import { ProfileDisplay } from "@/components/profile/ProfileDisplay";
 import type { UserProfile } from "@/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -35,7 +35,7 @@ interface ProfilePageProps {
 
 // Since metadata cannot be dynamic with "use client", we'll set a generic one in layout or keep it simple.
 // export const metadata: Metadata = {
-//   title: 'User Profile | CollabForge',
+//   title: 'User Profile | DevNet',
 // };
 
 export default function ProfilePage({ params }: ProfilePageProps) {

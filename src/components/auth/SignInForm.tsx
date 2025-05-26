@@ -82,7 +82,7 @@ export function SignInForm() {
     <Card>
       <CardHeader>
         <CardTitle>Sign In</CardTitle>
-        <CardDescription>Welcome back to CollabForge! Sign in to continue.</CardDescription>
+        <CardDescription>Welcome back to DevNet! Sign in to continue.</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>

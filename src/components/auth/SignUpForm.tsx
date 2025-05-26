@@ -92,7 +92,7 @@ export function SignUpForm() {
     <Card>
       <CardHeader>
         <CardTitle>Create an Account</CardTitle>
-        <CardDescription>Join CollabForge and start collaborating today!</CardDescription>
+        <CardDescription>Join DevNet and start collaborating today!</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
