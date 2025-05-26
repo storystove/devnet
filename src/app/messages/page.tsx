@@ -14,8 +14,10 @@ import { db } from "@/lib/firebase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatDistanceToNow } from "date-fns";
 import type { Timestamp } from "firebase/firestore";
+import { Badge } from "@/components/ui/badge"; // Added missing import
 
-interface ActiveChat extends UserProfile['activeChats'][0] {}
+// Correctly define ActiveChat type
+type ActiveChat = NonNullable<UserProfile['activeChats']>[number];
 
 export default function MessagesPage() {
   const { user, loading: authLoading } = useAuth();
