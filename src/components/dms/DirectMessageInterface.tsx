@@ -7,19 +7,19 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { UserProfile, DirectMessage as MessageType } from "@/types";
 import { Send, Paperclip, ArrowLeft, Loader2 } from "lucide-react";
-import { CardHeader, CardTitle, CardFooter } from "@/components/ui/card"; // Removed Card, CardContent for full height layout
+import { CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useAuth } from "@/providers/AuthProvider";
 import { useState, useEffect, useRef, FormEvent, useCallback } from "react";
 import { rtdb, db } from "@/lib/firebase";
 import { ref, onValue, push, serverTimestamp as rtdbServerTimestamp, query, orderByChild, limitToLast, off } from "firebase/database";
-import { doc, setDoc, serverTimestamp as firestoreServerTimestamp, Timestamp, getDoc } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp as firestoreServerTimestamp, Timestamp, getDoc, collection, addDoc } from "firebase/firestore";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 
 
 interface DirectMessageInterfaceProps {
   chatId: string;
-  currentUser: NonNullable<ReturnType<typeof useAuth>['user']>; // Ensured currentUser is not null
+  currentUser: NonNullable<ReturnType<typeof useAuth>['user']>;
   otherUser: Partial<UserProfile>;
 }
 
@@ -40,7 +40,7 @@ export function DirectMessageInterface({ chatId, currentUser, otherUser }: Direc
     const messagesRef = query(
       ref(rtdb, `directMessages/${chatId}/messages`),
       orderByChild('timestamp'),
-      limitToLast(50) // Load last 50 messages
+      limitToLast(50)
     );
 
     const unsubscribe = onValue(messagesRef, (snapshot) => {
@@ -50,24 +50,28 @@ export function DirectMessageInterface({ chatId, currentUser, otherUser }: Direc
       });
       setMessages(fetchedMessages);
       setIsLoadingMessages(false);
-      setTimeout(scrollToBottom, 100); // Scroll after messages are rendered
+      setTimeout(scrollToBottom, 100); 
     }, (error) => {
       console.error("Error fetching messages:", error);
       setIsLoadingMessages(false);
-      // Handle error display if needed
     });
 
-    return () => off(messagesRef); // Detach listener
-  }, [chatId, scrollToBottom]);
+    // Mark messages as read for current user in this chat
+    const currentUserChatRef = doc(db, "users", currentUser.uid, "activeChats", chatId);
+    setDoc(currentUserChatRef, { unreadCount: 0 }, { merge: true });
+
+
+    return () => off(messagesRef);
+  }, [chatId, scrollToBottom, currentUser.uid]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  const updateChatMetadata = async (lastMessageText: string) => {
+  const updateChatMetadataAndNotify = async (lastMessageText: string) => {
     const lastMessageTimestamp = firestoreServerTimestamp();
 
-    // Update for current user
+    // Update for current user (sender)
     const currentUserChatRef = doc(db, "users", currentUser.uid, "activeChats", chatId);
     await setDoc(currentUserChatRef, {
       chatId: chatId,
@@ -76,10 +80,10 @@ export function DirectMessageInterface({ chatId, currentUser, otherUser }: Direc
       otherUserAvatarUrl: otherUser.avatarUrl,
       lastMessage: lastMessageText,
       lastMessageTimestamp: lastMessageTimestamp,
-      // unreadCount could be managed here if needed (e.g., increment for the other user)
+      unreadCount: 0, // Sender's unread count is 0 for this chat
     }, { merge: true });
 
-    // Update for other user
+    // Update for other user (recipient) & create notification
     if (otherUser.id) {
       const otherUserChatRef = doc(db, "users", otherUser.id, "activeChats", chatId);
       const otherUserChatSnap = await getDoc(otherUserChatRef);
@@ -92,8 +96,23 @@ export function DirectMessageInterface({ chatId, currentUser, otherUser }: Direc
         otherUserAvatarUrl: currentUser.photoURL,
         lastMessage: lastMessageText,
         lastMessageTimestamp: lastMessageTimestamp,
-        unreadCount: currentUnreadCount + 1, // Increment unread count for the recipient
+        unreadCount: currentUnreadCount + 1,
       }, { merge: true });
+
+      // Create notification for the recipient
+      const notificationRef = collection(db, "users", otherUser.id, "notifications");
+      await addDoc(notificationRef, {
+          recipientId: otherUser.id,
+          type: 'dm',
+          fromUserId: currentUser.uid,
+          fromUserDisplayName: currentUser.displayName || currentUser.email,
+          fromUserAvatarUrl: currentUser.photoURL || null,
+          chatId: chatId,
+          messageSnippet: lastMessageText.substring(0, 50) + (lastMessageText.length > 50 ? "..." : ""),
+          timestamp: serverTimestamp(),
+          read: false,
+          link: `/messages/${chatId}`
+      });
     }
   };
 
@@ -106,17 +125,16 @@ export function DirectMessageInterface({ chatId, currentUser, otherUser }: Direc
     const messageData = {
       senderId: currentUser.uid,
       text: newMessage.trim(),
-      timestamp: rtdbServerTimestamp(), // RTDB server timestamp placeholder
+      timestamp: rtdbServerTimestamp(),
     };
 
     try {
       const messagesPath = `directMessages/${chatId}/messages`;
       await push(ref(rtdb, messagesPath), messageData);
-      await updateChatMetadata(newMessage.trim());
+      await updateChatMetadataAndNotify(newMessage.trim());
       setNewMessage("");
     } catch (error) {
       console.error("Error sending message:", error);
-      // Handle error (e.g., show toast)
     } finally {
       setIsSending(false);
     }
@@ -128,7 +146,7 @@ export function DirectMessageInterface({ chatId, currentUser, otherUser }: Direc
 
 
   return (
-    <div className="flex flex-col h-full bg-card text-card-foreground"> {/* Use full height */}
+    <div className="flex flex-col h-full bg-card text-card-foreground">
       <CardHeader className="flex flex-row items-center justify-between p-3 border-b sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-10">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" asChild className="md:hidden">
@@ -140,10 +158,8 @@ export function DirectMessageInterface({ chatId, currentUser, otherUser }: Direc
           </Avatar>
           <div>
             <CardTitle className="text-base sm:text-lg">{otherUserName}</CardTitle>
-            {/* <p className="text-xs text-muted-foreground">Online</p> */}
           </div>
         </div>
-        {/* Room actions (e.g., info, settings) can go here */}
       </CardHeader>
       
       <ScrollArea className="flex-grow p-4 space-y-4" ref={scrollAreaRef}>
@@ -159,15 +175,17 @@ export function DirectMessageInterface({ chatId, currentUser, otherUser }: Direc
           messages.map((msg) => {
             const isOwnMessage = msg.senderId === currentUser.uid;
             const senderDisplayName = isOwnMessage ? "You" : otherUserName;
+            // Use current user's photoURL directly for own messages
             const senderAvatar = isOwnMessage ? currentUser.photoURL : otherUserAvatar;
-            const senderInitials = senderDisplayName?.charAt(0).toUpperCase();
+            // Fallback for sender initials if displayName is somehow not available
+            const senderInitialsFallback = (isOwnMessage ? currentUser.displayName : otherUserName)?.charAt(0).toUpperCase() || 'U';
             
             return (
               <div key={msg.id} className={`flex items-end gap-2 ${isOwnMessage ? "justify-end" : ""}`}>
                 {!isOwnMessage && (
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={senderAvatar || undefined} data-ai-hint="profile avatar" />
-                    <AvatarFallback>{senderInitials}</AvatarFallback>
+                    <AvatarFallback>{senderInitialsFallback}</AvatarFallback>
                   </Avatar>
                 )}
                 <div className={`max-w-[70%] p-3 rounded-xl shadow ${isOwnMessage ? "bg-primary text-primary-foreground rounded-br-none" : "bg-card-foreground/10 dark:bg-secondary rounded-bl-none"}`}>
@@ -180,7 +198,7 @@ export function DirectMessageInterface({ chatId, currentUser, otherUser }: Direc
                 {isOwnMessage && (
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={senderAvatar || undefined} data-ai-hint="profile avatar" />
-                    <AvatarFallback>{senderInitials}</AvatarFallback>
+                    <AvatarFallback>{senderInitialsFallback}</AvatarFallback>
                   </Avatar>
                 )}
               </div>

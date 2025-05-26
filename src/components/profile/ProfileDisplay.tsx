@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useAuth } from "@/providers/AuthProvider";
 import { useEffect, useState, useCallback } from "react";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, writeBatch, serverTimestamp, increment, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, writeBatch, serverTimestamp, increment, deleteDoc, collection, addDoc, Timestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 
@@ -34,8 +34,8 @@ export function ProfileDisplay({ profile, isCurrentUser = false }: ProfileDispla
   const initials = displayName.charAt(0).toUpperCase();
 
   const checkFollowStatus = useCallback(async () => {
-    if (!currentUser || !profile || currentUser.uid === profile.id) return;
-    setIsFollowLoading(true);
+    if (!currentUser || !profile || currentUser.uid === profile.id || authLoading) return;
+    setIsFollowLoading(true); // Should be a different loading state, but okay for now
     try {
       const followingRef = doc(db, "users", currentUser.uid, "following", profile.id);
       const docSnap = await getDoc(followingRef);
@@ -45,7 +45,7 @@ export function ProfileDisplay({ profile, isCurrentUser = false }: ProfileDispla
     } finally {
       setIsFollowLoading(false);
     }
-  }, [currentUser, profile]);
+  }, [currentUser, profile, authLoading]);
 
   useEffect(() => {
     checkFollowStatus();
@@ -111,6 +111,20 @@ export function ProfileDisplay({ profile, isCurrentUser = false }: ProfileDispla
           followerCount: increment(1),
           updatedAt: serverTimestamp()  
         });
+        
+        // Create notification for the followed user
+        const notificationRef = collection(db, "users", profile.id, "notifications");
+        await addDoc(notificationRef, {
+            recipientId: profile.id,
+            type: 'follow',
+            fromUserId: currentUser.uid,
+            fromUserDisplayName: currentUser.displayName || currentUser.email,
+            fromUserAvatarUrl: currentUser.photoURL || null,
+            timestamp: serverTimestamp(),
+            read: false,
+            link: `/profile/${currentUser.uid}`
+        });
+
         await batch.commit();
         setIsFollowing(true);
         setCurrentFollowerCount(prev => prev + 1);
@@ -129,7 +143,6 @@ export function ProfileDisplay({ profile, isCurrentUser = false }: ProfileDispla
       toast({ title: "Cannot message this user.", variant: "destructive" });
       return;
     }
-    // Create a unique chat ID (sorted UIDs)
     const ids = [currentUser.uid, profile.id].sort();
     const chatId = ids.join('_');
     router.push(`/messages/${chatId}`);
@@ -219,7 +232,7 @@ export function ProfileDisplay({ profile, isCurrentUser = false }: ProfileDispla
          </div>
 
       </CardContent>
-      {!isCurrentUser && currentUser && (
+      {!isCurrentUser && currentUser && !authLoading && (
          <CardFooter className="border-t p-4 flex flex-col sm:flex-row gap-2">
             <Button 
               onClick={handleFollowToggle} 
@@ -234,7 +247,7 @@ export function ProfileDisplay({ profile, isCurrentUser = false }: ProfileDispla
               ) : (
                 <UserPlus className="mr-2 h-4 w-4" />
               )}
-              {isFollowing ? "Unfollow" : `Follow`} {displayName}
+              {isFollowing ? "Unfollow" : `Follow`}
             </Button>
             <Button 
               onClick={handleMessage} 

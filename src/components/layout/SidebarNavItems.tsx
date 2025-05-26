@@ -7,15 +7,20 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarMenuBadge,
 } from "@/components/ui/sidebar";
-import { Home, Rocket, MessageSquare as RoomIcon, Users, UserCircle, Settings, MessagesSquare } from "lucide-react"; // Changed MessageSquare to RoomIcon for clarity
+import { Home, Rocket, MessageSquare as RoomIcon, Users, UserCircle, Settings, MessagesSquare, Bell } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
+import { useEffect, useState } from "react";
+import { collection, query, where, onSnapshot, Unsubscribe } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 const navItems = [
   { href: "/", label: "Feed", icon: Home },
   { href: "/startups", label: "Startups", icon: Rocket },
   { href: "/rooms", label: "Rooms", icon: RoomIcon },
-  { href: "/messages", label: "Messages", icon: MessagesSquare, requireAuth: true }, // New Messages Link
+  { href: "/messages", label: "Messages", icon: MessagesSquare, requireAuth: true },
+  { href: "/notifications", label: "Notifications", icon: Bell, requireAuth: true, hasBadge: true },
 ];
 
 const userNavItems = (userId?: string) => [
@@ -27,17 +32,38 @@ const userNavItems = (userId?: string) => [
 export function SidebarNavItems() {
   const pathname = usePathname();
   const { user } = useAuth();
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  useEffect(() => {
+    let unsubscribe: Unsubscribe | undefined;
+    if (user) {
+      const notificationsRef = collection(db, "users", user.uid, "notifications");
+      const q = query(notificationsRef, where("read", "==", false));
+      
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        setUnreadNotifications(snapshot.size);
+      }, (error) => {
+        console.error("Error fetching unread notifications count:", error);
+        setUnreadNotifications(0);
+      });
+    } else {
+      setUnreadNotifications(0);
+    }
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [user]);
 
   const allItems = [...navItems];
   if (user) {
-    // Add user-specific items that are not already in general nav
     userNavItems(user.uid).forEach(userItem => {
       if (!allItems.find(item => item.href === userItem.href && item.requireAuth)) {
         allItems.push(userItem);
       }
     });
   }
-
 
   return (
     <SidebarMenu>
@@ -48,16 +74,20 @@ export function SidebarNavItems() {
           ? item.href.replace('[userId]', user.uid) 
           : item.href;
 
+        const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+        const showBadge = item.hasBadge && unreadNotifications > 0;
+
         return (
           <SidebarMenuItem key={item.label}>
             <SidebarMenuButton
               asChild
-              isActive={pathname === href || (href !== "/" && pathname.startsWith(href))} // More robust active check for nested routes
+              isActive={isActive}
               tooltip={{ children: item.label, side: "right", align: "center" }}
             >
               <Link href={href}>
                 <item.icon />
                 <span>{item.label}</span>
+                {showBadge && <SidebarMenuBadge>{unreadNotifications}</SidebarMenuBadge>}
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

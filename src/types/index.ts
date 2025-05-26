@@ -15,7 +15,6 @@ export interface UserProfile {
   joinedStartups?: string[]; // Array of startup IDs
   createdAt?: Timestamp; // Firestore Timestamp
   updatedAt?: Timestamp; // Firestore Timestamp
-  // Added for DM chat list
   activeChats?: {
     chatId: string;
     otherUserId: string;
@@ -25,6 +24,7 @@ export interface UserProfile {
     lastMessageTimestamp?: Timestamp | null;
     unreadCount?: number;
   }[];
+  unreadNotificationCount?: number; // For quick display, might be denormalized
 }
 
 export interface Post {
@@ -84,4 +84,21 @@ export interface DirectMessage {
   text: string;
   timestamp: number; // RTDB typically uses Unix ms timestamp
   readBy?: { [userId: string]: boolean };
+}
+
+export type NotificationType = 'follow' | 'dm' | 'like' | 'comment'; // Add more as needed
+
+export interface Notification {
+  id: string;
+  recipientId: string; // The user who receives the notification
+  type: NotificationType;
+  fromUserId: string;
+  fromUserDisplayName: string | null;
+  fromUserAvatarUrl?: string | null;
+  postId?: string; // For like, comment
+  chatId?: string; // For DM
+  messageSnippet?: string; // For DM
+  timestamp: Timestamp;
+  read: boolean;
+  link: string; // URL to navigate to (e.g., profile, post, chat)
 }
