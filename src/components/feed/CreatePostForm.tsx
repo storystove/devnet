@@ -66,10 +66,10 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
     setIsLoading(true);
     
     try {
-      const postData: Omit<Post, "id" | "createdAt"> & { createdAt: Timestamp } = { // Ensure createdAt is a serverTimestamp for writing
+      const postData: Omit<Post, "id" | "createdAt"> & { createdAt: Timestamp } = {
         authorId: user.uid,
         authorDisplayName: user.displayName || "Anonymous",
-        authorAvatarUrl: user.photoURL || undefined,
+        authorAvatarUrl: user.photoURL || null, // Ensure null instead of undefined
         text: data.text,
         imageUrl: data.imageUrl || undefined,
         hashtags: data.tags || [],
@@ -78,20 +78,24 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
           : undefined,
         likeCount: 0,
         commentCount: 0,
-        createdAt: serverTimestamp() as Timestamp, // Placeholder, server will set this
+        createdAt: serverTimestamp() as Timestamp,
       };
 
       const docRef = await addDoc(collection(db, "posts"), postData);
       
       toast({ title: "Post created!", description: "Your post is now live." });
       if (onPostCreated) {
-        // Construct a client-side version of the post to update UI immediately
         const createdPost: Post = {
-          ...postData,
           id: docRef.id,
-          // Replace serverTimestamp with a client-side Date for immediate display
-          // Firestore will have the accurate server time.
-          // For UI consistency, this might need a re-fetch or more complex state management.
+          authorId: postData.authorId,
+          authorDisplayName: postData.authorDisplayName,
+          authorAvatarUrl: postData.authorAvatarUrl,
+          text: postData.text,
+          imageUrl: postData.imageUrl,
+          hashtags: postData.hashtags,
+          codeSnippet: postData.codeSnippet,
+          likeCount: postData.likeCount,
+          commentCount: postData.commentCount,
           createdAt: Timestamp.now(), 
         };
         onPostCreated(createdPost);
