@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from "next/image";
@@ -8,6 +9,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import type { Post } from "@/types";
 import { formatDistanceToNow } from "date-fns";
+import type { Timestamp } from "firebase/firestore";
 import { ThumbsUp, MessageCircle, Share2, Code, CornerDownRight } from "lucide-react";
 
 interface PostCardProps {
@@ -15,7 +17,9 @@ interface PostCardProps {
 }
 
 export function PostCard({ post }: PostCardProps) {
-  const timeAgo = formatDistanceToNow(new Date(post.createdAt), { addSuffix: true });
+  // Convert Firestore Timestamp to JavaScript Date for formatDistanceToNow
+  const createdAtDate = (post.createdAt as Timestamp)?.toDate ? (post.createdAt as Timestamp).toDate() : new Date();
+  const timeAgo = formatDistanceToNow(createdAtDate, { addSuffix: true });
 
   return (
     <Card className="mb-6 shadow-lg overflow-hidden">
@@ -67,23 +71,23 @@ export function PostCard({ post }: PostCardProps) {
       </CardContent>
       <CardFooter className="flex justify-between items-center p-4 border-t">
         <div className="flex space-x-1 sm:space-x-3">
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled>
             <ThumbsUp className="mr-1 h-4 w-4" />
             <span className="text-xs">{post.likeCount || 0}</span>
             <span className="sr-only">Likes</span>
           </Button>
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled>
             <MessageCircle className="mr-1 h-4 w-4" />
             <span className="text-xs">{post.commentCount || 0}</span>
              <span className="sr-only">Comments</span>
           </Button>
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled>
             <Share2 className="mr-1 h-4 w-4" />
             <span className="text-xs hidden sm:inline">Share</span>
              <span className="sr-only">Share</span>
           </Button>
         </div>
-         <Button variant="outline" size="sm">
+         <Button variant="outline" size="sm" disabled>
             <CornerDownRight className="mr-1 h-4 w-4" />
             <span className="text-xs">Reply</span>
          </Button>

@@ -1,7 +1,8 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,12 +16,15 @@ import {
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/providers/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
 import { TagInput } from "@/components/shared/TagInput";
 import { useState } from "react";
 import { Image as ImageIcon, Code, Send, Loader2 } from "lucide-react";
+import { collection, addDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import type { Post } from "@/types";
 
 const postFormSchema = z.object({
   text: z.string().min(1, "Post content cannot be empty.").max(1000, "Post content is too long."),
@@ -32,7 +36,11 @@ const postFormSchema = z.object({
 
 type PostFormValues = z.infer<typeof postFormSchema>;
 
-export function CreatePostForm() {
+interface CreatePostFormProps {
+  onPostCreated?: (newPost: Post) => void;
+}
+
+export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -48,7 +56,7 @@ export function CreatePostForm() {
     },
   });
 
-  const textContent = form.watch("text"); // For tag suggestions
+  const textContent = form.watch("text");
 
   async function onSubmit(data: PostFormValues) {
     if (!user) {
@@ -56,13 +64,49 @@ export function CreatePostForm() {
       return;
     }
     setIsLoading(true);
-    console.log("Creating post:", data);
-    // TODO: Implement actual post creation logic (e.g., save to Firestore)
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+    
+    try {
+      const postData: Omit<Post, "id" | "createdAt"> & { createdAt: Timestamp } = { // Ensure createdAt is a serverTimestamp for writing
+        authorId: user.uid,
+        authorDisplayName: user.displayName || "Anonymous",
+        authorAvatarUrl: user.photoURL || undefined,
+        text: data.text,
+        imageUrl: data.imageUrl || undefined,
+        hashtags: data.tags || [],
+        codeSnippet: data.codeSnippetCode && data.codeSnippetLanguage 
+          ? { code: data.codeSnippetCode, language: data.codeSnippetLanguage } 
+          : undefined,
+        likeCount: 0,
+        commentCount: 0,
+        createdAt: serverTimestamp() as Timestamp, // Placeholder, server will set this
+      };
 
-    toast({ title: "Post created!", description: "Your post is now live." });
-    form.reset();
-    setIsLoading(false);
+      const docRef = await addDoc(collection(db, "posts"), postData);
+      
+      toast({ title: "Post created!", description: "Your post is now live." });
+      if (onPostCreated) {
+        // Construct a client-side version of the post to update UI immediately
+        const createdPost: Post = {
+          ...postData,
+          id: docRef.id,
+          // Replace serverTimestamp with a client-side Date for immediate display
+          // Firestore will have the accurate server time.
+          // For UI consistency, this might need a re-fetch or more complex state management.
+          createdAt: Timestamp.now(), 
+        };
+        onPostCreated(createdPost);
+      }
+      form.reset();
+    } catch (error: any) {
+      console.error("Error creating post:", error);
+      toast({
+        title: "Post Creation Failed",
+        description: error.message || "Could not save your post.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -107,7 +151,6 @@ export function CreatePostForm() {
               )}
             />
             
-            {/* Placeholder for Code Snippet */}
             <FormItem>
               <FormLabel className="flex items-center gap-2">
                 <Code className="h-4 w-4 text-muted-foreground" /> Code Snippet (Optional)
@@ -120,7 +163,6 @@ export function CreatePostForm() {
               </FormControl>
               <FormDescription>Share a piece of code with the community.</FormDescription>
             </FormItem>
-
 
             <FormField
               control={form.control}
