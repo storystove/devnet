@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from "next/image";
@@ -6,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import type { UserProfile } from "@/types";
-import { Mail, Link as LinkIcon, Briefcase, Languages, Users, UserCheck, Edit3, ExternalLink } from "lucide-react";
+import { Mail, Link as LinkIcon, Briefcase, Languages, Users, UserCheck, Edit3, ExternalLink, UserPlus } from "lucide-react";
 import Link from "next/link";
 
 interface ProfileDisplayProps {
@@ -105,7 +106,7 @@ export function ProfileDisplay({ profile, isCurrentUser = false }: ProfileDispla
       </CardContent>
       {!isCurrentUser && (
          <CardFooter className="border-t p-4">
-            <Button className="w-full sm:w-auto">
+            <Button className="w-full sm:w-auto" disabled> {/* Follow functionality not yet implemented */}
                 <UserPlus className="mr-2 h-4 w-4" /> Follow {displayName}
             </Button>
          </CardFooter>
