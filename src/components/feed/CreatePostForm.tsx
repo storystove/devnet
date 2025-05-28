@@ -20,15 +20,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/providers/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
 import { TagInput } from "@/components/shared/TagInput";
-import { useState } from "react";
-import { Image as ImageIcon, Code, Send, Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
+import { Image as ImageIcon, Code, Send, Loader2, FileUp } from "lucide-react";
 import { collection, addDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Post } from "@/types";
+import { uploadImagePlaceholder } from "@/lib/imageUploader"; // Import the placeholder
 
 const postFormSchema = z.object({
   text: z.string().min(1, "Post content cannot be empty.").max(1000, "Post content is too long."),
-  imageUrl: z.string().url("Invalid image URL.").optional().or(z.literal("")),
+  // Image URL is now optional in schema, will be populated by upload
   tags: z.array(z.string()).optional(),
   codeSnippetLanguage: z.string().optional(),
   codeSnippetCode: z.string().optional(),
@@ -44,12 +45,13 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   
   const form = useForm<PostFormValues>({
     resolver: zodResolver(postFormSchema),
     defaultValues: {
       text: "",
-      imageUrl: "",
       tags: [],
       codeSnippetLanguage: "",
       codeSnippetCode: "",
@@ -58,6 +60,14 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
 
   const textContent = form.watch("text");
 
+  const handleImageFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setSelectedImageFile(event.target.files[0]);
+    } else {
+      setSelectedImageFile(null);
+    }
+  };
+
   async function onSubmit(data: PostFormValues) {
     if (!user) {
       toast({ title: "Please sign in to post.", variant: "destructive" });
@@ -65,9 +75,25 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
     }
     setIsLoading(true);
     
+    let imageUrl: string | null = null;
+    if (selectedImageFile) {
+      try {
+        // Using the placeholder uploader
+        imageUrl = await uploadImagePlaceholder(selectedImageFile);
+      } catch (error) {
+        console.error("Placeholder image upload error:", error);
+        toast({
+          title: "Image Upload Failed (Placeholder)",
+          description: "Could not get placeholder URL for the image.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+    }
+
     try {
-      // Base post data
-      const postDataPayload: any = { 
+      const postDataPayload: Omit<Post, "id" | "createdAt"> & { createdAt: any } = { 
         authorId: user.uid,
         authorDisplayName: user.displayName || "Anonymous",
         authorAvatarUrl: user.photoURL || null,
@@ -78,12 +104,10 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
         createdAt: serverTimestamp(),
       };
 
-      // Conditionally add imageUrl if provided
-      if (data.imageUrl && data.imageUrl.trim() !== "") {
-        postDataPayload.imageUrl = data.imageUrl;
+      if (imageUrl) {
+        postDataPayload.imageUrl = imageUrl;
       }
 
-      // Conditionally add codeSnippet if both language and code are provided
       if (data.codeSnippetCode && data.codeSnippetCode.trim() !== "" && data.codeSnippetLanguage && data.codeSnippetLanguage.trim() !== "") {
         postDataPayload.codeSnippet = { 
           code: data.codeSnippetCode, 
@@ -91,26 +115,23 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
         };
       }
 
-      const docRef = await addDoc(collection(db, "posts"), postDataPayload as Omit<Post, "id">);
+      const docRef = await addDoc(collection(db, "posts"), postDataPayload);
       
       toast({ title: "Post created!", description: "Your post is now live." });
       if (onPostCreated) {
         const createdPost: Post = {
           id: docRef.id,
-          authorId: postDataPayload.authorId,
-          authorDisplayName: postDataPayload.authorDisplayName,
-          authorAvatarUrl: postDataPayload.authorAvatarUrl,
-          text: postDataPayload.text,
-          imageUrl: postDataPayload.imageUrl, // Will be undefined if not in postDataPayload
-          hashtags: postDataPayload.hashtags,
-          codeSnippet: postDataPayload.codeSnippet, // Will be undefined if not in postDataPayload
-          likeCount: postDataPayload.likeCount,
-          commentCount: postDataPayload.commentCount,
+          ...postDataPayload,
+          imageUrl: postDataPayload.imageUrl || null,
           createdAt: Timestamp.now(), // Use client-side timestamp for optimistic UI update
         };
         onPostCreated(createdPost);
       }
       form.reset();
+      setSelectedImageFile(null);
+      if (imageInputRef.current) {
+        imageInputRef.current.value = ""; // Reset file input
+      }
     } catch (error: any) {
       console.error("Error creating post:", error);
       toast({
@@ -149,21 +170,25 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="imageUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="flex items-center gap-2">
-                    <ImageIcon className="h-4 w-4 text-muted-foreground" /> Image URL (Optional)
-                  </FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://example.com/image.png" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+            <FormItem>
+              <FormLabel className="flex items-center gap-2">
+                <FileUp className="h-4 w-4 text-muted-foreground" /> Upload Image (Optional)
+              </FormLabel>
+              <FormControl>
+                <Input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleImageFileChange} 
+                  ref={imageInputRef}
+                  className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                />
+              </FormControl>
+              {selectedImageFile && (
+                <FormDescription className="text-xs">
+                  Selected: {selectedImageFile.name} ({(selectedImageFile.size / 1024).toFixed(2)} KB)
+                </FormDescription>
               )}
-            />
+            </FormItem>
             
             <FormItem>
               <FormLabel className="flex items-center gap-2">
