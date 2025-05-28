@@ -3,7 +3,7 @@
 // Make sure to set Authorized JavaScript Origins and Redirect URIs in your Google Cloud Console
 
 const CLIENT_ID = '44719805646-d0to64n5i0nrgjsda6uohlhk2gotiis9.apps.googleusercontent.com';
-const API_KEY = 'AIzaSyBtHbO7QNdZRlCVgQI41pr77bs4w18MCN8'; // Used for API calls, not for GIS client init directly
+const API_KEY = 'AIzaSyBtHbO7QNdZRlCVgQI41pr77bs4w18MCN8'; // Used for API calls
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
 let gapiScriptLoadPromise: Promise<void> | null = null;
@@ -16,23 +16,19 @@ function loadScript(src: string, id: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const existingScript = document.getElementById(id);
     if (existingScript) {
-      // Simple check, assumes if script tag exists, it's loaded/loading
-      // For production, might need more robust ready state checking
-      // Wait for global object to be available as a proxy for script readiness
       const interval = setInterval(() => {
         if ((id === 'gapi-script' && window.gapi && window.gapi.load) || (id === 'gis-script' && window.google && window.google.accounts)) {
           clearInterval(interval);
           resolve();
         }
       }, 100);
-      // Add a timeout to prevent infinite loop if script fails silently
       setTimeout(() => {
         clearInterval(interval);
         if (!((id === 'gapi-script' && window.gapi && window.gapi.load) || (id === 'gis-script' && window.google && window.google.accounts))) {
           console.warn(`Script ${id} tag exists but global object not ready after timeout.`);
         }
-        resolve(); // Resolve anyway, subsequent checks will fail if not truly ready
-      }, 5000); // 5 second timeout for script to make global available
+        resolve(); 
+      }, 5000);
       return;
     }
 
@@ -55,8 +51,7 @@ function loadScript(src: string, id: string): Promise<void> {
   });
 }
 
-// Initialize GAPI client (primarily for API key and discovery docs, if needed by gapi.client.request)
-// Since we use fetch, this mainly just makes `gapi.client` available.
+// Initialize GAPI client
 async function ensureGapiClientInitialized(): Promise<void> {
   if (gapiClientInitializedPromise) {
     return gapiClientInitializedPromise;
@@ -68,28 +63,34 @@ async function ensureGapiClientInitialized(): Promise<void> {
     await gapiScriptLoadPromise;
 
     return new Promise<void>((resolve, reject) => {
-      if (typeof window.gapi.load === 'function') {
-        window.gapi.load('client', async () => { // We only need 'client' part of GAPI now
+      if (typeof window.gapi?.load === 'function') {
+        window.gapi.load('client', async () => {
           try {
-            // Check if gapi.client is already initialized
-            if (window.gapi.client && window.gapi.client.drive) { // Simple check
-                 console.log("GAPI client seems to be already initialized.");
-                 resolve();
-                 return;
+            // Check if gapi.client is already initialized in a generic way
+            // For instance, check if a previous init call has completed if this function is re-entrant
+            // However, with the singleton promise, this specific check might be less critical here.
+            // The main thing is that gapi.client should exist after gapi.load('client',...)
+            if (!window.gapi.client) {
+                throw new Error("window.gapi.client is not available after loading 'client'.");
             }
+
+            // Initialize GAPI client with API Key but without specific Drive discoveryDocs
+            // as we are using fetch directly. This sets up the API key for general GAPI client use.
             await window.gapi.client.init({
               apiKey: API_KEY,
-              // discoveryDocs are useful if using gapi.client.drive.files.create, etc.
-              // For raw fetch, their role is less direct but init may perform API key validation.
-              discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+              // discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'], // Removed this line
             });
-            console.log("GAPI client initialized successfully (for API key config/discovery).");
+            console.log("GAPI client initialized successfully (for API key config).");
             resolve();
           } catch (initError: any) {
             const errorMessage = getErrorMessage(initError, "GAPI gapi.client.init failed");
+            const errorDetails = initError?.result?.error || initError?.details || null;
+            const fullErrorObjectString = typeof initError === 'object' && initError !== null ? JSON.stringify(initError) : String(initError);
+            
             console.error(
               `Error initializing GAPI client library. Message: ${errorMessage}.`,
-              `Original error:`, initError
+              errorDetails ? `Specific Details: ${JSON.stringify(errorDetails)}.` : '',
+              `Full error object: ${fullErrorObjectString}. Original error:`, initError
             );
             gapiClientInitializedPromise = null; // Allow retry on failure
             reject(new Error(`GAPI Client Init Failed: ${errorMessage}`));
@@ -109,7 +110,7 @@ async function ensureGapiClientInitialized(): Promise<void> {
 export async function getAccessToken(): Promise<string> {
   try {
     // Ensure GAPI client is available (though not strictly for auth token with GIS, good for consistency if gapi.client is used elsewhere)
-    // await ensureGapiClientInitialized(); // This line might be optional if no gapi.client.* calls are made and API_KEY is only for fetch
+    await ensureGapiClientInitialized(); 
 
     if (!gisScriptLoadPromise) {
       gisScriptLoadPromise = loadScript('https://accounts.google.com/gsi/client', 'gis-script');
@@ -149,7 +150,7 @@ export async function getAccessToken(): Promise<string> {
             reject(new Error(errMsg));
         }
       });
-      tokenClient.requestAccessToken({ prompt: '' }); // prompt: '' can be overridden if needed e.g. {prompt: 'consent'}
+      tokenClient.requestAccessToken({ prompt: '' }); 
     });
 
   } catch (error) {
@@ -164,10 +165,7 @@ export async function getAccessToken(): Promise<string> {
 export async function uploadImagePlaceholder(file: File): Promise<string> {
   try {
     console.log("Starting image upload process with GIS...");
-    // The API_KEY is still used for the Google Drive API calls, not directly for OAuth token acquisition with GIS.
-    // Ensure GAPI client is initialized if its init process does any API key validation globally for `gapi.client`
-    await ensureGapiClientInitialized(); // This might be optional if API_KEY is only used for fetch and `gapi.client` isn't used.
-                                        // However, some GAPI setups might require it for the key to be recognized for any GAPI related activity.
+    await ensureGapiClientInitialized(); 
 
     const accessToken = await getAccessToken();
     console.log("Access token obtained for upload via GIS.");
@@ -182,7 +180,6 @@ export async function uploadImagePlaceholder(file: File): Promise<string> {
     form.append('file', file);
 
     console.log(`Uploading ${file.name} to Google Drive...`);
-    // The API_KEY is part of the query string for Google Drive API calls.
     const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&key=${API_KEY}`, {
       method: 'POST',
       headers: new Headers({
@@ -193,9 +190,9 @@ export async function uploadImagePlaceholder(file: File): Promise<string> {
 
     if (!response.ok) {
       const errorBodyText = await response.text();
-      let errorJson = {};
+      let errorJson: any = {};
       try { errorJson = JSON.parse(errorBodyText); } catch (e) {/* ignore */}
-      const detailMessage = getErrorMessage(errorJson, response.statusText);
+      const detailMessage = getErrorMessage(errorJson?.error || errorJson, response.statusText);
       console.error("Google Drive Upload failed. Status:", response.status, "Body:", errorBodyText);
       throw new Error(`Upload to Google Drive failed: ${response.status} ${detailMessage}`);
     }
@@ -207,7 +204,6 @@ export async function uploadImagePlaceholder(file: File): Promise<string> {
     }
     console.log(`File ${uploadedFile.name} (ID: ${uploadedFile.id}) uploaded successfully.`);
 
-    // Make file public
     console.log(`Setting permissions for file ID: ${uploadedFile.id} to public reader...`);
     const permissionsResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${uploadedFile.id}/permissions?key=${API_KEY}`, {
       method: 'POST',
@@ -220,9 +216,9 @@ export async function uploadImagePlaceholder(file: File): Promise<string> {
 
     if (!permissionsResponse.ok) {
       const errorBodyText = await permissionsResponse.text();
-      let errorJson = {};
+      let errorJson: any = {};
       try { errorJson = JSON.parse(errorBodyText); } catch (e) {/* ignore */}
-      const detailMessage = getErrorMessage(errorJson, permissionsResponse.statusText);
+      const detailMessage = getErrorMessage(errorJson?.error || errorJson, permissionsResponse.statusText);
       console.error("Setting Google Drive permissions failed. Status:", permissionsResponse.status, "Body:", errorBodyText);
       console.warn(`Setting public permissions for Google Drive file ${uploadedFile.id} failed. The image may not be viewable by others without direct sharing. Error: ${detailMessage}`);
     } else {
@@ -262,9 +258,12 @@ function getErrorMessage(error: any, defaultMessage: string): string {
   if (error && typeof error.error === 'string') { // Fallback to just the error code if no description
     return error.error;
   }
+  // General object check for a 'message' property
+  if (error && typeof error.message === 'string') {
+    return error.message;
+  }
   try {
     const stringified = JSON.stringify(error);
-    // Avoid empty object stringification or just empty quotes
     if (stringified && stringified !== '{}' && stringified !== '""' && stringified !== "null") { 
       return stringified;
     }
@@ -276,28 +275,35 @@ function getErrorMessage(error: any, defaultMessage: string): string {
 declare global {
   interface Window { 
     gapi: any; 
-    google: { // For Google Identity Services (GIS)
+    google: { 
         accounts: {
-            id: any; // For Sign In with Google
+            id: any; 
             oauth2: {
                 initTokenClient: (config: google.accounts.oauth2.TokenClientConfig) => google.accounts.oauth2.TokenClient;
-                // Potentially other oauth2 methods
+                hasGrantedAllScopes: (token: google.accounts.oauth2.TokenResponse, ...scopes: string[]) => boolean;
+                hasGrantedAnyScope: (token: google.accounts.oauth2.TokenResponse, ...scopes: string[]) => boolean;
+                revoke: (accessToken: string, done: () => void) => void;
             };
         };
     };
   }
 }
 
-// More specific GIS types for better intellisense and type checking
 declare namespace google.accounts.oauth2 {
   interface TokenClientConfig {
       client_id: string;
       scope: string;
-      callback?: (response: TokenResponse | GoogleOAuthError) => void; // Called after requestAccessToken completes
-      error_callback?: (error: GoogleOAuthError) => void; // For errors during the token client operations
-      prompt?: string; // e.g. '', 'consent', 'select_account'
+      callback?: (response: TokenResponse | GoogleOAuthError) => void; 
+      error_callback?: (error: GoogleOAuthError) => void; 
+      prompt?: string; 
       hint?: string;
       ux_mode?: 'popup' | 'redirect';
+      state?: string;
+      nonce?: string;
+      login_hint?: string;
+      hd?: string; // Hosted Domain
+      include_granted_scopes?: boolean;
+      enable_granular_consent?: boolean;
       // ... other config options based on GIS documentation
   }
 
@@ -307,19 +313,19 @@ declare namespace google.accounts.oauth2 {
   
   interface TokenResponse {
       access_token: string;
-      expires_in: number; // Duration in seconds
+      expires_in: number; 
       scope: string;
       token_type: string;
-      // Might contain id_token, authuser, prompt, hd, etc.
-      hd?: string; // Hosted domain, if applicable
+      hd?: string; 
       // ... other properties from GIS documentation
   }
 
   interface GoogleOAuthError {
-      type?: string; // For instance, 'popup_closed', 'popup_failed_to_open', 'token_request_failed'
-      error?: string; // e.g. 'access_denied', 'invalid_request', 'unauthorized_client', 'invalid_scope'
+      type?: string; 
+      error?: string; 
       error_description?: string;
       error_uri?: string;
       // ... other error properties from GIS documentation
   }
 }
+
