@@ -6,8 +6,10 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { auth, db } from "@/lib/firebase"; // Added db
 import type { UserProfile, Notification } from "@/types"; // Added Notification
 import { Skeleton } from "@/components/ui/skeleton";
-import { collection, query, where, onSnapshot, Unsubscribe, getDocs, limit, orderBy } from "firebase/firestore"; // Added Firestore imports
+import { collection, query, where, onSnapshot, Unsubscribe, getDocs, limit, orderBy, doc, getDoc } from "firebase/firestore"; // Added Firestore imports
 import { useToast } from "@/hooks/use-toast"; // Added useToast
+import { Button } from "@/components/ui/button"; // Added Button import
+import Link from "next/link"; // Added Link import
 
 interface AuthContextType {
   user: (FirebaseUser & Partial<UserProfile>) | null;
@@ -106,7 +108,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 };
 
 // Helper to get user doc more easily
-import { doc, getDoc } from "firebase/firestore";
+// import { doc, getDoc } from "firebase/firestore"; // Already imported above
 
 
 export const useAuth = (): AuthContextType => {
