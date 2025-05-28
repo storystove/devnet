@@ -66,37 +66,47 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
     setIsLoading(true);
     
     try {
-      const postData: Omit<Post, "id" | "createdAt"> & { createdAt: Timestamp } = {
+      // Base post data
+      const postDataPayload: any = { 
         authorId: user.uid,
         authorDisplayName: user.displayName || "Anonymous",
         authorAvatarUrl: user.photoURL || null,
         text: data.text,
-        imageUrl: data.imageUrl || undefined, // Ensure undefined if empty string
         hashtags: data.tags || [],
-        codeSnippet: data.codeSnippetCode && data.codeSnippetLanguage 
-          ? { code: data.codeSnippetCode, language: data.codeSnippetLanguage } 
-          : undefined,
         likeCount: 0,
         commentCount: 0,
-        createdAt: serverTimestamp() as Timestamp,
+        createdAt: serverTimestamp(),
       };
 
-      const docRef = await addDoc(collection(db, "posts"), postData);
+      // Conditionally add imageUrl if provided
+      if (data.imageUrl && data.imageUrl.trim() !== "") {
+        postDataPayload.imageUrl = data.imageUrl;
+      }
+
+      // Conditionally add codeSnippet if both language and code are provided
+      if (data.codeSnippetCode && data.codeSnippetCode.trim() !== "" && data.codeSnippetLanguage && data.codeSnippetLanguage.trim() !== "") {
+        postDataPayload.codeSnippet = { 
+          code: data.codeSnippetCode, 
+          language: data.codeSnippetLanguage 
+        };
+      }
+
+      const docRef = await addDoc(collection(db, "posts"), postDataPayload as Omit<Post, "id">);
       
       toast({ title: "Post created!", description: "Your post is now live." });
       if (onPostCreated) {
         const createdPost: Post = {
           id: docRef.id,
-          authorId: postData.authorId,
-          authorDisplayName: postData.authorDisplayName,
-          authorAvatarUrl: postData.authorAvatarUrl,
-          text: postData.text,
-          imageUrl: postData.imageUrl,
-          hashtags: postData.hashtags,
-          codeSnippet: postData.codeSnippet,
-          likeCount: postData.likeCount,
-          commentCount: postData.commentCount,
-          createdAt: Timestamp.now(), 
+          authorId: postDataPayload.authorId,
+          authorDisplayName: postDataPayload.authorDisplayName,
+          authorAvatarUrl: postDataPayload.authorAvatarUrl,
+          text: postDataPayload.text,
+          imageUrl: postDataPayload.imageUrl, // Will be undefined if not in postDataPayload
+          hashtags: postDataPayload.hashtags,
+          codeSnippet: postDataPayload.codeSnippet, // Will be undefined if not in postDataPayload
+          likeCount: postDataPayload.likeCount,
+          commentCount: postDataPayload.commentCount,
+          createdAt: Timestamp.now(), // Use client-side timestamp for optimistic UI update
         };
         onPostCreated(createdPost);
       }
