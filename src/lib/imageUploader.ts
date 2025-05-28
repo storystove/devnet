@@ -6,7 +6,9 @@ const CLIENT_ID = '44719805646-d0to64n5i0nrgjsda6uohlhk2gotiis9.apps.googleuserc
 // SECURITY WARNING: Exposing API keys directly in client-side code is a security risk.
 // For production applications, consider using a backend proxy or Firebase Cloud Functions
 // to handle API calls and keep sensitive keys secure.
-const API_KEY = 'AIzaSyBdvuGPrkBFLdDpPBafAp0dekIX4UgG_tY'; // This is where your API key would be used.
+// This API key is used for some Google Drive API calls. Ensure it has the necessary permissions
+// and restrictions (e.g., HTTP referrers, API service restrictions) in your Google Cloud Console.
+const API_KEY = 'AIzaSyBtHbO7QNdZRlCVgQI41pr77bs4w18MCN8'; 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
 let gapiInitializationPromise: Promise<void> | null = null;
@@ -280,3 +282,4 @@ declare global {
     gapi: any; // You can refine this 'any' with more specific GAPI types if available
   }
 }
+
