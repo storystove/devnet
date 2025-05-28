@@ -47,7 +47,7 @@ function loadGapiBaseScript(): Promise<void> {
         script.onerror = (err) => {
             console.error("Error loading GAPI script from CDN", err);
             gapiInitializationPromise = null; 
-            reject(err);
+            reject(new Error(`Failed to load GAPI script from CDN: ${err instanceof Event ? 'Network error' : String(err)}`));
         };
         document.body.appendChild(script);
     });
@@ -97,10 +97,9 @@ export function initGoogleOAuth(): Promise<void> {
           if (initError) {
             if (initError.message) {
               errorMessage = initError.message;
-            }
-            if (initError.details) {
-              errorDetails = initError.details;
-            } else if (initError.result && initError.result.error) {
+            } else if (typeof initError.details === 'string') { // GAPI specific error structure
+                errorMessage = initError.details;
+            } else if (initError.result && initError.result.error) { // Another GAPI error structure
               errorMessage = initError.result.error.message || errorMessage;
               errorDetails = initError.result.error.details || initError.result.error.errors || errorDetails;
             } else if (typeof initError === 'string') {
@@ -114,107 +113,154 @@ export function initGoogleOAuth(): Promise<void> {
             `Full error object: ${fullErrorObjectString}. Original error:`, initError
           );
           gapiInitializationPromise = null; // Allow retry on failure
-          reject(initError); 
+          reject(new Error(`GAPI Init Failed: ${errorMessage}`)); 
         }
       });
     } catch (scriptLoadError) {
-        console.error("Failed to load or initialize base gapi.js script.", scriptLoadError);
+        const errorMessage = scriptLoadError instanceof Error ? scriptLoadError.message : String(scriptLoadError);
+        console.error("Failed to load or initialize base gapi.js script.", errorMessage, scriptLoadError);
         gapiInitializationPromise = null; 
-        reject(scriptLoadError);
+        reject(new Error(`GAPI Script Load Failed: ${errorMessage}`));
     }
   });
   return gapiInitializationPromise;
 }
 
+// Helper to extract a meaningful message from various error types
+function getErrorMessage(error: any, defaultMessage: string): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && error.details && typeof error.details === 'string') { // GAPI error format
+    return error.details;
+  }
+  if (error && error.error && typeof error.error.message === 'string') { // Another GAPI error format
+    return error.error.message;
+  }
+  if (error && error.result && error.result.error && typeof error.result.error.message === 'string') { // Yet another
+    return error.result.error.message;
+  }
+  try {
+    const stringified = JSON.stringify(error);
+    if (stringified !== '{}') {
+      return stringified;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return defaultMessage;
+}
+
+
 // Sign in and get access token
 export async function signInWithGoogle(): Promise<string> {
-  await initGoogleOAuth(); 
+  try {
+    await initGoogleOAuth(); 
 
-  const GoogleAuth = window.gapi.auth2.getAuthInstance();
-  if (!GoogleAuth) {
-    throw new Error("Google Auth instance (gapi.auth2.getAuthInstance) is not available after GAPI initialization. This usually indicates a problem with the OAuth client setup (Client ID, Origins, or API Key).");
-  }
-
-  if (GoogleAuth.isSignedIn.get()) {
-    const currentUser = GoogleAuth.currentUser.get();
-    const authResponse = currentUser.getAuthResponse(true); 
-    if (authResponse && authResponse.access_token) {
-      console.log("Reusing existing Google Sign-In session.");
-      return authResponse.access_token;
+    const GoogleAuth = window.gapi.auth2.getAuthInstance();
+    if (!GoogleAuth) {
+      throw new Error("Google Auth instance (gapi.auth2.getAuthInstance) is not available. Check GAPI init and OAuth Client ID setup in Google Cloud Console (Authorized JavaScript Origins, Redirect URIs).");
     }
-  }
-  
-  console.log("Attempting Google Sign-In popup...");
-  const user = await GoogleAuth.signIn();
-  const authResponse = user.getAuthResponse();
-  const token = authResponse.access_token;
 
-  if (!token) {
-    console.error("Google Sign-In successful but no access token returned. Response:", authResponse);
-    throw new Error("Google Sign-In was successful but no access token was returned.");
+    if (GoogleAuth.isSignedIn.get()) {
+      const currentUser = GoogleAuth.currentUser.get();
+      const authResponse = currentUser.getAuthResponse(true); 
+      if (authResponse && authResponse.access_token) {
+        console.log("Reusing existing Google Sign-In session.");
+        return authResponse.access_token;
+      }
+    }
+    
+    console.log("Attempting Google Sign-In popup...");
+    const user = await GoogleAuth.signIn();
+    const authResponse = user.getAuthResponse();
+    const token = authResponse.access_token;
+
+    if (!token) {
+      console.error("Google Sign-In successful but no access token returned. Response:", authResponse);
+      throw new Error("Google Sign-In was successful but no access token was returned.");
+    }
+    console.log("Google Sign-In successful, token obtained.");
+    return token;
+  } catch (error: any) {
+    const message = getErrorMessage(error, "Google Sign-In failed. Check console and ensure pop-ups are not blocked.");
+    console.error("Error during signInWithGoogle:", message, error);
+    throw new Error(message);
   }
-  console.log("Google Sign-In successful, token obtained.");
-  return token;
 }
 
 // Upload file using token
 export async function uploadImagePlaceholder(file: File): Promise<string> {
-  console.log("Starting image upload process...");
-  const accessToken = await signInWithGoogle();
-  console.log("Access token obtained for upload.");
+  try {
+    console.log("Starting image upload process...");
+    const accessToken = await signInWithGoogle();
+    console.log("Access token obtained for upload.");
 
-  const metadata = {
-    name: file.name,
-    mimeType: file.type
-  };
+    const metadata = {
+      name: file.name,
+      mimeType: file.type
+    };
 
-  const form = new FormData();
-  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-  form.append('file', file);
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', file);
 
-  console.log(`Uploading ${file.name} to Google Drive...`);
-  const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&key=${API_KEY}`, {
-    method: 'POST',
-    headers: new Headers({
-      Authorization: `Bearer ${accessToken}`
-    }),
-    body: form
-  });
+    console.log(`Uploading ${file.name} to Google Drive...`);
+    const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&key=${API_KEY}`, {
+      method: 'POST',
+      headers: new Headers({
+        Authorization: `Bearer ${accessToken}`
+      }),
+      body: form
+    });
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    console.error("Google Drive Upload failed. Status:", response.status, "Body:", errorBody);
-    throw new Error(`Upload to Google Drive failed: ${response.statusText} - ${errorBody}`);
+    if (!response.ok) {
+      const errorBody = await response.text();
+      const detailMessage = getErrorMessage(JSON.parse(errorBody || "{}"), response.statusText);
+      console.error("Google Drive Upload failed. Status:", response.status, "Body:", errorBody);
+      throw new Error(`Upload to Google Drive failed: ${response.status} ${detailMessage}`);
+    }
+
+    const uploadedFile = await response.json();
+    if (!uploadedFile || !uploadedFile.id) {
+      console.error("Google Drive upload response did not contain a file ID:", uploadedFile);
+      throw new Error("Google Drive upload response did not contain a file ID.");
+    }
+    console.log(`File ${uploadedFile.name} (ID: ${uploadedFile.id}) uploaded successfully.`);
+
+    console.log(`Setting permissions for file ID: ${uploadedFile.id} to public reader...`);
+    const permissionsResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${uploadedFile.id}/permissions?key=${API_KEY}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ role: 'reader', type: 'anyone' })
+    });
+
+    if (!permissionsResponse.ok) {
+      const errorBody = await permissionsResponse.text();
+      const detailMessage = getErrorMessage(JSON.parse(errorBody || "{}"), permissionsResponse.statusText);
+      console.error("Setting Google Drive permissions failed. Status:", permissionsResponse.status, "Body:", errorBody);
+      // Not throwing an error here, but logging a strong warning. The file might be uploaded but not viewable.
+      // Depending on requirements, you might want to throw new Error(`Setting public permissions failed: ${detailMessage}`);
+      console.warn(`Setting public permissions for Google Drive file ${uploadedFile.id} failed. The image may not be viewable by others without direct sharing. Error: ${detailMessage}`);
+    } else {
+      console.log(`Permissions for file ID: ${uploadedFile.id} set successfully.`);
+    }
+    
+    const downloadUrl = `https://drive.google.com/uc?id=${uploadedFile.id}`;
+    console.log(`Generated download URL: ${downloadUrl}`);
+    return downloadUrl;
+
+  } catch (error: any) {
+    const message = getErrorMessage(error, "Image upload process encountered an error.");
+    console.error("Error during uploadImagePlaceholder catch block:", message, error);
+    throw new Error(message);
   }
-
-  const uploadedFile = await response.json();
-  if (!uploadedFile || !uploadedFile.id) {
-    console.error("Google Drive upload response did not contain a file ID:", uploadedFile);
-    throw new Error("Google Drive upload response did not contain a file ID.");
-  }
-  console.log(`File ${uploadedFile.name} (ID: ${uploadedFile.id}) uploaded successfully.`);
-
-  console.log(`Setting permissions for file ID: ${uploadedFile.id} to public reader...`);
-  const permissionsResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${uploadedFile.id}/permissions?key=${API_KEY}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ role: 'reader', type: 'anyone' })
-  });
-
-  if (!permissionsResponse.ok) {
-    const errorBody = await permissionsResponse.text();
-    console.error("Setting Google Drive permissions failed. Status:", permissionsResponse.status, "Body:", errorBody);
-    console.warn(`Setting public permissions for Google Drive file ${uploadedFile.id} failed. The image may not be viewable by others without direct sharing.`);
-  } else {
-    console.log(`Permissions for file ID: ${uploadedFile.id} set successfully.`);
-  }
-  
-  const downloadUrl = `https://drive.google.com/uc?id=${uploadedFile.id}`;
-  console.log(`Generated download URL: ${downloadUrl}`);
-  return downloadUrl;
 }
 
 declare global {
