@@ -50,7 +50,6 @@ export function SignUpForm() {
     if (!userCredential.user) return;
     const userRef = doc(db, "users", userCredential.user.uid);
     
-    // Check if document already exists (e.g. for Google Sign In)
     const userSnap = await getDoc(userRef);
 
     if (!userSnap.exists()) {
@@ -69,6 +68,7 @@ export function SignUpForm() {
         followerCount: 0,
         followingCount: 0,
         joinedStartups: [],
+        profileSetupCompleted: false, // Initialize profile setup as incomplete
         ...additionalData,
       };
       try {
@@ -92,7 +92,7 @@ export function SignUpForm() {
       await createUserProfileDocument(userCredential, { displayName: values.displayName });
 
       toast({ title: "Account created successfully!" });
-      router.push("/");
+      router.push("/profile-setup"); // Redirect to profile setup
     } catch (error: any) {
       console.error("Sign up error:", error);
       toast({
@@ -110,9 +110,17 @@ export function SignUpForm() {
     const provider = new GoogleAuthProvider();
     try {
       const userCredential = await signInWithPopup(auth, provider);
-      await createUserProfileDocument(userCredential);
+      // Check if user profile already exists, if so, don't reset profileSetupCompleted
+      const userRef = doc(db, "users", userCredential.user.uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists() && userSnap.data()?.profileSetupCompleted) {
+         await createUserProfileDocument(userCredential); // Will merge/update if exists
+         router.push("/"); // User already completed setup
+      } else {
+        await createUserProfileDocument(userCredential, { profileSetupCompleted: false });
+        router.push("/profile-setup"); // Redirect to profile setup for new Google sign-in or incomplete setup
+      }
       toast({ title: "Signed up with Google successfully!" });
-      router.push("/");
     } catch (error: any) {
       console.error("Google sign up error:", error);
       toast({

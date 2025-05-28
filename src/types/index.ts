@@ -25,6 +25,7 @@ export interface UserProfile {
     unreadCount?: number;
   }[];
   unreadNotificationCount?: number; // For quick display, might be denormalized
+  profileSetupCompleted?: boolean; // Added for onboarding flow
 }
 
 export interface Post {
