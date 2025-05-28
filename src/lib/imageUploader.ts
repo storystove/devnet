@@ -2,7 +2,7 @@
 // Full OAuth 2.0 flow for Google Drive upload
 // Make sure to set Authorized JavaScript Origins and Redirect URIs in your Google Cloud Console
 
-const CLIENT_ID = '831328018373-8oe2s3g0e3dk4rruu37ladf76sfgtrci.apps.googleusercontent.com';
+const CLIENT_ID = '44719805646-d0to64n5i0nrgjsda6uohlhk2gotiis9.apps.googleusercontent.com';
 // SECURITY WARNING: Exposing API keys directly in client-side code is a security risk.
 // For production applications, consider using a backend proxy or Firebase Cloud Functions
 // to handle API calls and keep sensitive keys secure.
@@ -24,7 +24,7 @@ function loadGapiBaseScript(): Promise<void> {
                 if (typeof window.gapi !== 'undefined' && typeof window.gapi.load === 'function') {
                     clearInterval(interval);
                     resolve();
-                } else if (attempts > 20) { 
+                } else if (attempts > 20) { // Increased attempts for slower networks/initialization
                     clearInterval(interval);
                     reject(new Error("GAPI script tag found but window.gapi did not initialize."));
                 }
@@ -64,6 +64,7 @@ export function initGoogleOAuth(): Promise<void> {
     try {
       await loadGapiBaseScript(); 
 
+      // Check if GAPI client and auth2 are already initialized and user is signed in
       if (window.gapi?.client?.getToken && window.gapi?.auth2?.getAuthInstance && window.gapi.auth2.getAuthInstance().isSignedIn.get()) {
         console.log("GAPI client and auth already initialized and user signed in.");
         resolve();
@@ -78,8 +79,10 @@ export function initGoogleOAuth(): Promise<void> {
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
             scope: SCOPES
           });
+           // Additional check to ensure auth instance is truly available
            if (!window.gapi.auth2.getAuthInstance()) {
              console.warn("gapi.client.init succeeded but gapi.auth2.getAuthInstance() is null. Auth might not be fully ready.");
+             // Potentially add a small delay and retry or reject if still null after timeout
            }
           console.log("Google API client and auth initialized successfully.");
           resolve();
@@ -88,9 +91,11 @@ export function initGoogleOAuth(): Promise<void> {
           let errorDetails = null;
           let fullErrorObjectString = "";
 
+          // Attempt to stringify the error object for more details
           try {
             fullErrorObjectString = JSON.stringify(initError, Object.getOwnPropertyNames(initError));
           } catch (e) {
+            // If stringification fails, use a placeholder
             fullErrorObjectString = "Error object could not be stringified.";
           }
 
@@ -145,11 +150,11 @@ function getErrorMessage(error: any, defaultMessage: string): string {
   }
   try {
     const stringified = JSON.stringify(error);
-    if (stringified !== '{}') {
+    if (stringified !== '{}') { // Avoid empty object stringification
       return stringified;
     }
   } catch (e) {
-    // ignore
+    // ignore stringification errors
   }
   return defaultMessage;
 }
@@ -158,16 +163,18 @@ function getErrorMessage(error: any, defaultMessage: string): string {
 // Sign in and get access token
 export async function signInWithGoogle(): Promise<string> {
   try {
-    await initGoogleOAuth(); 
+    await initGoogleOAuth(); // Ensure GAPI is initialized
 
     const GoogleAuth = window.gapi.auth2.getAuthInstance();
     if (!GoogleAuth) {
+      // This check is crucial after initGoogleOAuth completes
       throw new Error("Google Auth instance (gapi.auth2.getAuthInstance) is not available. Check GAPI init and OAuth Client ID setup in Google Cloud Console (Authorized JavaScript Origins, Redirect URIs).");
     }
 
+    // Check if user is already signed in
     if (GoogleAuth.isSignedIn.get()) {
       const currentUser = GoogleAuth.currentUser.get();
-      const authResponse = currentUser.getAuthResponse(true); 
+      const authResponse = currentUser.getAuthResponse(true); // true to refresh token if expired
       if (authResponse && authResponse.access_token) {
         console.log("Reusing existing Google Sign-In session.");
         return authResponse.access_token;
@@ -231,6 +238,7 @@ export async function uploadImagePlaceholder(file: File): Promise<string> {
     }
     console.log(`File ${uploadedFile.name} (ID: ${uploadedFile.id}) uploaded successfully.`);
 
+    // Make file public
     console.log(`Setting permissions for file ID: ${uploadedFile.id} to public reader...`);
     const permissionsResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${uploadedFile.id}/permissions?key=${API_KEY}`, {
       method: 'POST',
@@ -252,19 +260,23 @@ export async function uploadImagePlaceholder(file: File): Promise<string> {
       console.log(`Permissions for file ID: ${uploadedFile.id} set successfully.`);
     }
     
+    // Construct the direct download URL for Google Drive files
     const downloadUrl = `https://drive.google.com/uc?id=${uploadedFile.id}`;
     console.log(`Generated download URL: ${downloadUrl}`);
     return downloadUrl;
 
   } catch (error: any) {
+    // Ensure a more specific error message is thrown from here
     const message = getErrorMessage(error, "Image upload process encountered an error.");
     console.error("Error during uploadImagePlaceholder catch block:", message, error);
     throw new Error(message);
   }
 }
 
+// TypeScript type declaration for the gapi object if not already present globally
+// This helps with type checking in your TypeScript project.
 declare global {
   interface Window { 
-    gapi: any; 
+    gapi: any; // You can refine this 'any' with more specific GAPI types if available
   }
 }
