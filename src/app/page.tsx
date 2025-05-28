@@ -14,11 +14,16 @@ import { Loader2, MessageSquare, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserSearchBar } from "@/components/search/UserSearchBar";
 import { UserSearchResultItem } from "@/components/search/UserSearchResultItem";
+import { Card, CardContent } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/providers/AuthProvider";
+import Link from "next/link";
 
 const POSTS_PER_PAGE = 10;
 
 export default function HomePage() {
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
   const [lastVisiblePost, setLastVisiblePost] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
@@ -27,6 +32,8 @@ export default function HomePage() {
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchAttempted, setSearchAttempted] = useState(false);
+
+  const [isCreatePostExpanded, setIsCreatePostExpanded] = useState(false);
 
   const fetchPosts = useCallback(async (loadMore = false) => {
     if (!loadMore) {
@@ -94,8 +101,6 @@ export default function HomePage() {
     setSearchAttempted(true);
     try {
       const usersRef = collection(db, "users");
-      // Basic prefix search (case-sensitive by default in Firestore)
-      // For case-insensitive, you might need to store a lowercase version of displayName
       const q = query(
         usersRef,
         where("displayName", ">=", searchTerm),
@@ -118,9 +123,10 @@ export default function HomePage() {
     }
   };
   
-  const handlePostCreated = (newPost: Post) => {
+  const handlePostCreatedAndCollapse = (newPost: Post) => {
     // Add the new post to the beginning of the list
     setPosts(prevPosts => [newPost, ...prevPosts]);
+    setIsCreatePostExpanded(false); // Collapse the form
   };
 
 
@@ -145,7 +151,40 @@ export default function HomePage() {
           )}
         </div>
         
-        <CreatePostForm onPostCreated={handlePostCreated} />
+        {currentUser && !isCreatePostExpanded && (
+          <Card
+            className="mb-6 shadow-lg cursor-pointer hover:bg-muted/30 transition-colors"
+            onClick={() => setIsCreatePostExpanded(true)}
+            tabIndex={0} 
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsCreatePostExpanded(true); }}
+            role="button"
+            aria-expanded="false"
+            aria-label="Create a new post"
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={currentUser.photoURL || undefined} alt={currentUser.displayName || "User"} data-ai-hint="profile avatar current user" />
+                  <AvatarFallback>{currentUser.displayName?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 p-2.5 bg-background rounded-full border border-input text-left text-muted-foreground hover:border-primary/50">
+                  What's on your mind, {currentUser.displayName?.split(' ')[0] || "Developer"}?
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        {isCreatePostExpanded && (
+          <CreatePostForm onPostCreated={handlePostCreatedAndCollapse} />
+        )}
+        {!currentUser && (
+           <Card className="mb-6 shadow-lg">
+            <CardContent className="p-6 text-center text-muted-foreground">
+              <Link href="/signin" className="text-primary hover:underline font-semibold">Sign in</Link> to create a post and join the conversation.
+            </CardContent>
+          </Card>
+        )}
+
         <Separator className="my-8" />
 
         {isLoadingPosts && posts.length === 0 ? (
