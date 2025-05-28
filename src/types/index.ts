@@ -33,7 +33,7 @@ export interface Post {
   authorDisplayName?: string;
   authorAvatarUrl?: string | null; // Ensure null is allowed
   text: string;
-  imageUrl?: string;
+  imageUrl?: string | null; // Allow null
   hashtags?: string[];
   codeSnippet?: { language: string; code: string };
   createdAt: Timestamp; // Firestore Timestamp
@@ -42,11 +42,11 @@ export interface Post {
 }
 
 export interface Comment {
-  id:string;
+  id: string;
   postId: string;
   authorId: string;
-  authorDisplayName?: string;
-  authorAvatarUrl?: string;
+  authorDisplayName?: string | null;
+  authorAvatarUrl?: string | null;
   text: string;
   createdAt: Timestamp; // Firestore Timestamp
 }
