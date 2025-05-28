@@ -2,55 +2,120 @@
 // Make sure to set Authorized JavaScript Origins and Redirect URIs in your Google Cloud Console
 
 const CLIENT_ID = '831328018373-8oe2s3g0e3dk4rruu37ladf76sfgtrci.apps.googleusercontent.com';
-const API_KEY = 'AIzaSyBdvuGPrkBFLdDpPBafAp0dekIX4UgG_tY';
+const API_KEY = 'AIzaSyBdvuGPrkBFLdDpPBafAp0dekIX4UgG_tY'; // SECURITY WARNING: API keys with broad permissions should ideally not be hardcoded client-side.
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
+let gapiInitializationPromise: Promise<void> | null = null;
+
+// Helper function to load the base gapi.js script
+function loadGapiBaseScript(): Promise<void> {
+    return new Promise((resolve, reject) => {
+        // Check if gapi is already available (script might have been loaded elsewhere or by a previous call)
+        if (typeof window.gapi !== 'undefined' && typeof window.gapi.load === 'function') {
+            resolve();
+            return;
+        }
+
+        // Check if the script tag already exists in the document
+        if (document.querySelector('script[src="https://apis.google.com/js/api.js"]')) {
+            // Script tag exists, but gapi might not be ready.
+            // This is a tricky state; we'll rely on repeated calls to initGoogleOAuth to eventually succeed
+            // or an interval check for window.gapi. For now, we'll try to proceed if gapi becomes available.
+            // A more robust solution might involve a global callback system for script loads.
+             let attempts = 0;
+             const interval = setInterval(() => {
+                if (typeof window.gapi !== 'undefined' && typeof window.gapi.load === 'function') {
+                    clearInterval(interval);
+                    resolve();
+                } else if (attempts > 20) { // Timeout after ~2 seconds
+                    clearInterval(interval);
+                    reject(new Error("GAPI script tag found but window.gapi did not initialize."));
+                }
+                attempts++;
+            }, 100);
+            return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = 'https://apis.google.com/js/api.js';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => {
+            if (typeof window.gapi !== 'undefined' && typeof window.gapi.load === 'function') {
+                resolve();
+            } else {
+                reject(new Error("GAPI script loaded but window.gapi.load is not a function."));
+            }
+        };
+        script.onerror = (err) => {
+            console.error("Error loading GAPI script from CDN", err);
+            gapiInitializationPromise = null; // Allow retry by clearing the promise
+            reject(err);
+        };
+        document.body.appendChild(script);
+    });
+}
+
+
 // Load gapi script and initialize client
-export async function initGoogleOAuth(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://apis.google.com/js/api.js';
-    script.onload = () => {
-      gapi.load('client:auth2', async () => {
+export function initGoogleOAuth(): Promise<void> {
+  if (gapiInitializationPromise) {
+    return gapiInitializationPromise;
+  }
+
+  gapiInitializationPromise = new Promise(async (resolve, reject) => {
+    try {
+      await loadGapiBaseScript(); // Step 1: Ensure gapi.js is loaded
+
+      // Check if gapi.client is already initialized (e.g. from a previous successful init)
+      // gapi.client.getToken will exist after successful client init with auth scopes
+      if (window.gapi?.client?.getToken && window.gapi?.auth2?.getAuthInstance && window.gapi.auth2.getAuthInstance().isSignedIn.get()) {
+        resolve();
+        return;
+      }
+      
+      // Step 2: Load 'client' and 'auth2' modules using gapi.load
+      window.gapi.load('client:auth2', async () => {
         try {
-          await gapi.client.init({
+          // Step 3: Initialize the API client and auth2 instance
+          await window.gapi.client.init({
             apiKey: API_KEY,
             clientId: CLIENT_ID,
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
             scope: SCOPES
           });
+          // Ensure auth instance is also ready
+           if (!window.gapi.auth2.getAuthInstance()) {
+             // This can happen if client.init completes but auth2 setup has an issue or is deferred.
+             // Usually, gapi.client.init with auth scopes handles gapi.auth2.init implicitly.
+             // If getAuthInstance is null, something went wrong.
+             console.warn("gapi.client.init succeeded but gapi.auth2.getAuthInstance() is null. Auth might not be fully ready.");
+           }
           resolve();
-        } catch (e) {
-          console.error("Error initializing Google API client", e);
-          reject(e);
+        } catch (initError) {
+          console.error("Error initializing Google API client (gapi.client.init or auth2)", initError);
+          gapiInitializationPromise = null; // Allow retry on failure
+          reject(initError);
         }
       });
-    };
-    script.onerror = (err) => {
-        console.error("Error loading GAPI script", err);
-        reject(err);
-    };
-    document.body.appendChild(script);
+    } catch (scriptLoadError) {
+        console.error("Failed to load or initialize base gapi.js script.", scriptLoadError);
+        gapiInitializationPromise = null; // Allow retry on failure
+        reject(scriptLoadError);
+    }
   });
+  return gapiInitializationPromise;
 }
 
 // Sign in and get access token
 export async function signInWithGoogle(): Promise<string> {
-  // Ensure gapi is loaded and initialized
-  if (!gapi?.client?.init) {
-    await initGoogleOAuth();
-  } else if (!gapi.auth2.getAuthInstance()) { // Check if auth instance exists
-    // This case might happen if init was called but auth instance wasn't ready
-    // or an error occurred. Attempt re-init or handle error.
-    // For simplicity, we'll re-init if no auth instance, but in a real app,
-    // you might want more sophisticated state management.
-    await initGoogleOAuth();
-  }
+  await initGoogleOAuth(); // Ensures gapi is loaded and client & auth2 initialized
 
-
-  const GoogleAuth = gapi.auth2.getAuthInstance();
+  const GoogleAuth = window.gapi.auth2.getAuthInstance();
   if (!GoogleAuth) {
-    throw new Error("Google Auth instance is not available. Initialization might have failed.");
+    // This error means that even after initGoogleOAuth, gapi.auth2.getAuthInstance() is null.
+    // This suggests a deeper issue with the GAPI auth2 library loading or initialization.
+    throw new Error("Google Auth instance (gapi.auth2.getAuthInstance) is not available. Initialization might have failed or the 'auth2' module didn't load as expected.");
   }
 
   // Check if user is already signed in
@@ -64,7 +129,13 @@ export async function signInWithGoogle(): Promise<string> {
   
   // If not signed in, or token is missing/expired, sign in
   const user = await GoogleAuth.signIn();
-  const token = user.getAuthResponse().access_token;
+  const authResponse = user.getAuthResponse();
+  const token = authResponse.access_token;
+
+  if (!token) {
+    console.error("Google Sign-In response:", authResponse);
+    throw new Error("Google Sign-In was successful but no access token was returned.");
+  }
   return token;
 }
 
@@ -75,6 +146,7 @@ export async function uploadImagePlaceholder(file: File): Promise<string> {
   const metadata = {
     name: file.name,
     mimeType: file.type
+    // To upload to a specific folder, add: parents: ['YOUR_FOLDER_ID']
   };
 
   const form = new FormData();
@@ -91,11 +163,15 @@ export async function uploadImagePlaceholder(file: File): Promise<string> {
 
   if (!response.ok) {
     const errorBody = await response.text();
-    console.error("Upload failed:", response.status, errorBody);
-    throw new Error(`Upload failed: ${response.statusText} - ${errorBody}`);
+    console.error("Google Drive Upload failed:", response.status, errorBody);
+    throw new Error(`Upload to Google Drive failed: ${response.statusText} - ${errorBody}`);
   }
 
   const uploadedFile = await response.json();
+  if (!uploadedFile || !uploadedFile.id) {
+    console.error("Google Drive upload response did not contain a file ID:", uploadedFile);
+    throw new Error("Google Drive upload response did not contain a file ID.");
+  }
 
   // Make file public
   const permissionsResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${uploadedFile.id}/permissions?key=${API_KEY}`, {
@@ -109,14 +185,19 @@ export async function uploadImagePlaceholder(file: File): Promise<string> {
 
   if (!permissionsResponse.ok) {
     const errorBody = await permissionsResponse.text();
-    console.error("Setting permissions failed:", permissionsResponse.status, errorBody);
-    throw new Error(`Setting permissions failed: ${permissionsResponse.statusText} - ${errorBody}`);
+    console.error("Setting Google Drive permissions failed:", permissionsResponse.status, errorBody);
+    // This is not necessarily a fatal error for the upload itself, but the image won't be public.
+    console.warn(`Setting public permissions for Google Drive file ${uploadedFile.id} failed. The image may not be viewable by others.`);
   }
 
-  // It's often better to use a direct download link or webContentLink for embedding if available.
-  // The 'uc?id=' link can sometimes run into issues with large files or quotas.
-  // For robust display, you might need `files.get` with `fields=webContentLink,webViewLink`.
-  // For simplicity here, we'll use the provided 'uc?id=' format.
+  // Using webContentLink is generally more reliable for direct embedding if available and public.
+  // The 'uc?id=' link can sometimes have issues or require extra handling.
+  // For a more robust solution, you might get the webContentLink after setting permissions:
+  // const fileMetadata = await fetch(`https://www.googleapis.com/drive/v3/files/${uploadedFile.id}?fields=webContentLink,webViewLink&key=${API_KEY}`, {
+  //   headers: new Headers({ Authorization: `Bearer ${accessToken}` })
+  // }).then(res => res.json());
+  // return fileMetadata.webContentLink || `https://drive.google.com/uc?id=${uploadedFile.id}`;
+  
   return `https://drive.google.com/uc?id=${uploadedFile.id}`;
 }
 
@@ -125,8 +206,7 @@ export async function uploadImagePlaceholder(file: File): Promise<string> {
 // For this context, a simple declare should suffice to avoid TypeScript errors
 // if the GAPI types are not globally available in your project setup.
 declare global {
-  interface Window { //_STUDIO_COMMENT_ফারহান ইফতেখার_: Fix gapi types by adding this to global Window
-    gapi: any;
+  interface Window { 
+    gapi: any; // Using 'any' for simplicity; ideally, you'd use @types/gapi and @types/gapi.auth2
   }
-  const gapi: any; //_STUDIO_COMMENT_ফারহান ইফতেখার_: Fix gapi types by adding this to global const
 }
