@@ -21,15 +21,14 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
 import { TagInput } from "@/components/shared/TagInput";
 import { useState, useRef } from "react";
-import { Image as ImageIcon, Code, Send, Loader2, FileUp } from "lucide-react";
+import { Image as ImageIcon, Code, Send, Loader2, FileUp, XCircle } from "lucide-react"; // Added XCircle
 import { collection, addDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Post } from "@/types";
-import { uploadImagePlaceholder } from "@/lib/imageUploader"; // Import the placeholder
+import { uploadImagePlaceholder } from "@/lib/imageUploader"; 
 
 const postFormSchema = z.object({
   text: z.string().min(1, "Post content cannot be empty.").max(1000, "Post content is too long."),
-  // Image URL is now optional in schema, will be populated by upload
   tags: z.array(z.string()).optional(),
   codeSnippetLanguage: z.string().optional(),
   codeSnippetCode: z.string().optional(),
@@ -39,9 +38,10 @@ type PostFormValues = z.infer<typeof postFormSchema>;
 
 interface CreatePostFormProps {
   onPostCreated?: (newPost: Post) => void;
+  onCancel?: () => void; // New prop
 }
 
-export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
+export function CreatePostForm({ onPostCreated, onCancel }: CreatePostFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -78,13 +78,12 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
     let imageUrl: string | null = null;
     if (selectedImageFile) {
       try {
-        // Using the placeholder uploader
         imageUrl = await uploadImagePlaceholder(selectedImageFile);
       } catch (error) {
         console.error("Placeholder image upload error:", error);
         toast({
-          title: "Image Upload Failed (Placeholder)",
-          description: "Could not get placeholder URL for the image.",
+          title: "Image Upload Failed",
+          description: "Could not process the image. Please try again.",
           variant: "destructive",
         });
         setIsLoading(false);
@@ -106,6 +105,9 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
 
       if (imageUrl) {
         postDataPayload.imageUrl = imageUrl;
+      } else {
+        // Ensure imageUrl is explicitly null if no image is selected and the field exists in the type
+        postDataPayload.imageUrl = null; 
       }
 
       if (data.codeSnippetCode && data.codeSnippetCode.trim() !== "" && data.codeSnippetLanguage && data.codeSnippetLanguage.trim() !== "") {
@@ -122,15 +124,15 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
         const createdPost: Post = {
           id: docRef.id,
           ...postDataPayload,
-          imageUrl: postDataPayload.imageUrl || null,
-          createdAt: Timestamp.now(), // Use client-side timestamp for optimistic UI update
+          imageUrl: postDataPayload.imageUrl, // Ensure this aligns with what's saved
+          createdAt: Timestamp.now(), 
         };
         onPostCreated(createdPost);
       }
       form.reset();
       setSelectedImageFile(null);
       if (imageInputRef.current) {
-        imageInputRef.current.value = ""; // Reset file input
+        imageInputRef.current.value = "";
       }
     } catch (error: any) {
       console.error("Error creating post:", error);
@@ -222,10 +224,18 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full sm:w-auto" disabled={isLoading || !user}>
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              {user ? "Create Post" : "Sign in to Post"}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button type="submit" className="w-full sm:flex-1" disabled={isLoading || !user}>
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                {user ? "Create Post" : "Sign in to Post"}
+              </Button>
+              {onCancel && (
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onCancel} disabled={isLoading}>
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Cancel
+                </Button>
+              )}
+            </div>
           </form>
         </Form>
       </CardContent>

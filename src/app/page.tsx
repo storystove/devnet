@@ -124,9 +124,12 @@ export default function HomePage() {
   };
   
   const handlePostCreatedAndCollapse = (newPost: Post) => {
-    // Add the new post to the beginning of the list
     setPosts(prevPosts => [newPost, ...prevPosts]);
-    setIsCreatePostExpanded(false); // Collapse the form
+    setIsCreatePostExpanded(false); 
+  };
+
+  const handleCancelCreatePost = () => {
+    setIsCreatePostExpanded(false);
   };
 
 
@@ -175,7 +178,10 @@ export default function HomePage() {
           </Card>
         )}
         {isCreatePostExpanded && (
-          <CreatePostForm onPostCreated={handlePostCreatedAndCollapse} />
+          <CreatePostForm 
+            onPostCreated={handlePostCreatedAndCollapse} 
+            onCancel={handleCancelCreatePost} 
+          />
         )}
         {!currentUser && (
            <Card className="mb-6 shadow-lg">
