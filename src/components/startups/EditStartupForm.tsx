@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription as ShadCNCardDescription } from "@/components/ui/card"; // Renamed import
 import { useAuth } from "@/providers/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
 import { TagInput } from "@/components/shared/TagInput";
@@ -27,7 +27,7 @@ import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import type { Startup } from "@/types";
-import { uploadImagePlaceholder } from "@/lib/imageUploader"; // Assuming this exists
+import { uploadImagePlaceholder } from "@/lib/imageUploader";
 import Image from "next/image";
 
 const startupStatus = ["idea", "developing", "launched", "scaling", "acquired"] as const;
@@ -131,7 +131,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
     }
     setIsLoading(true);
 
-    let updatedLogoUrl: string | null | undefined = startup.logoUrl; // Keep existing by default
+    let updatedLogoUrl: string | null | undefined = startup.logoUrl; 
     if (selectedLogoFile) {
       try {
         updatedLogoUrl = await uploadImagePlaceholder(selectedLogoFile);
@@ -140,7 +140,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
         setIsLoading(false);
         return;
       }
-    } else if (logoPreview === null && startup.logoUrl !== null) { // Check if user explicitly removed it
+    } else if (logoPreview === null && startup.logoUrl !== null) { 
         updatedLogoUrl = null;
     }
 
@@ -149,13 +149,13 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
     if (selectedScreenshotFile) {
       try {
         const newScreenshotUrl = await uploadImagePlaceholder(selectedScreenshotFile);
-        updatedScreenshotUrls = [newScreenshotUrl]; // For now, replace/set as single screenshot
+        updatedScreenshotUrls = [newScreenshotUrl]; 
       } catch (error: any) {
         toast({ title: "Screenshot Upload Failed", description: error?.message || "Could not process the screenshot.", variant: "destructive" });
         setIsLoading(false);
         return;
       }
-    } else if (screenshotPreview === null && startup.screenshotUrls && startup.screenshotUrls.length > 0) { // Check if user explicitly removed it
+    } else if (screenshotPreview === null && startup.screenshotUrls && startup.screenshotUrls.length > 0) { 
         updatedScreenshotUrls = null;
     }
     
@@ -192,7 +192,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle>Edit {startup.name}</CardTitle>
-        <FormDescription>Update the details for your startup.</FormDescription>
+        <ShadCNCardDescription>Update the details for your startup.</ShadCNCardDescription> {/* Changed to CardDescription */}
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -217,7 +217,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
               </FormLabel>
               {logoPreview && (
                 <div className="my-2 relative w-24 h-24">
-                  <Image src={logoPreview} alt="Logo preview" layout="fill" objectFit="contain" className="rounded border" />
+                  <Image src={logoPreview} alt="Logo preview" layout="fill" objectFit="contain" className="rounded border" data-ai-hint="company logo preview" />
                   <Button type="button" variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6" onClick={removeLogo}><Trash2 className="h-3 w-3"/></Button>
                 </div>
               )}
@@ -277,7 +277,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
               </FormLabel>
                {screenshotPreview && (
                 <div className="my-2 relative w-full aspect-video max-w-sm">
-                  <Image src={screenshotPreview} alt="Screenshot preview" layout="fill" objectFit="contain" className="rounded border" />
+                  <Image src={screenshotPreview} alt="Screenshot preview" layout="fill" objectFit="contain" className="rounded border" data-ai-hint="startup screenshot preview" />
                    <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={removeScreenshot}><Trash2 className="h-3 w-3"/></Button>
                 </div>
               )}
