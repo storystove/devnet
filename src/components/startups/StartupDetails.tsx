@@ -17,8 +17,9 @@ import { doc, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, w
 import { useEffect, useState, FormEvent, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
-import { ReviewItem } from "./ReviewItem"; // New component
+import { ReviewItem } from "./ReviewItem";
 import { useRouter } from "next/navigation";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"; // Added ScrollArea and ScrollBar
 
 interface StartupDetailsProps {
   startup: Startup;
@@ -150,10 +151,9 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
         userDisplayName: currentUser.displayName || currentUser.email,
         userAvatarUrl: currentUser.photoURL || null,
         requestedAt: serverTimestamp(),
-        status: "pending", // 'pending', 'approved', 'rejected'
+        status: "pending", 
       });
 
-      // Send notification to startup creator
       const notificationRef = collection(db, "users", startup.creatorId, "notifications");
       await addDoc(notificationRef, {
         recipientId: startup.creatorId,
@@ -165,7 +165,7 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
         startupName: startup.name,
         timestamp: serverTimestamp(),
         read: false,
-        link: `/startups/${startup.id}?tab=requests` // Link to manage requests (future)
+        link: `/startups/${startup.id}?tab=requests` 
       });
 
       setHasRequestedToJoin(true);
@@ -290,21 +290,31 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
           {startup.screenshotUrls && startup.screenshotUrls.length > 0 && (
             <div>
               <h3 className="text-lg font-semibold mb-3 flex items-center"><ImageIcon className="mr-2 h-5 w-5 text-primary"/>Screenshots</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {startup.screenshotUrls.map((url, index) => (
-                  <a key={index} href={url} target="_blank" rel="noopener noreferrer" className="block rounded-md overflow-hidden border hover:opacity-90 transition-opacity">
-                    <div className="relative aspect-video w-full">
-                      <Image
-                        src={url}
-                        alt={`${startup.name} screenshot ${index + 1}`}
-                        layout="fill"
-                        objectFit="cover"
-                        data-ai-hint="startup screenshot application interface"
-                      />
-                    </div>
-                  </a>
-                ))}
-              </div>
+              <ScrollArea className="w-full whitespace-nowrap rounded-md">
+                <div className="flex space-x-4 pb-4">
+                  {startup.screenshotUrls.map((url, index) => (
+                    <a 
+                      key={index} 
+                      href={url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="block rounded-lg overflow-hidden border hover:opacity-90 transition-opacity shadow-md"
+                    >
+                      <div className="relative h-40 w-64 sm:h-48 sm:w-72 md:h-56 md:w-80"> {/* Consistent aspect ratio & height */}
+                        <Image
+                          src={url}
+                          alt={`${startup.name} screenshot ${index + 1}`}
+                          layout="fill"
+                          objectFit="cover"
+                          className="rounded-lg"
+                          data-ai-hint="startup screenshot application interface"
+                        />
+                      </div>
+                    </a>
+                  ))}
+                </div>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
             </div>
           )}
 
@@ -336,10 +346,8 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
             {startup.coFounderIds && startup.coFounderIds.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {startup.coFounderIds.map(founderId => (
-                    // In a real app, you'd fetch and display co-founder names/avatars
                     <Link key={founderId} href={`/profile/${founderId}`}>
                         <Badge variant="secondary" className="hover:bg-primary/10 cursor-pointer">
-                            {/* TODO: Fetch and display founder name if possible */}
                             Founder: {founderId.substring(0,6)}... 
                             <ExternalLinkIcon className="ml-1 h-3 w-3" />
                         </Badge>
@@ -438,5 +446,3 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
     </div>
   );
 }
-
-    
