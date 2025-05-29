@@ -1,16 +1,24 @@
+
 import Link from "next/link";
+import Image from "next/image";
 
 export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const logoUrl = "https://drive.google.com/uc?id=1XDpa3j14CoVRO6e9Gtv9enwq5FV7h_i1";
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <Link href="/" className="mb-8 flex items-center space-x-2">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8 text-primary">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
-        </svg>
+        <Image 
+          src={logoUrl} 
+          alt="DevNet Logo" 
+          width={32} 
+          height={32} 
+          className="rounded-sm"
+          data-ai-hint="application logo"
+        />
         <span className="text-2xl font-bold">DevNet</span>
       </Link>
       <div className="w-full max-w-md">
