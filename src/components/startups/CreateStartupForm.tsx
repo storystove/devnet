@@ -31,6 +31,7 @@ import { uploadImagePlaceholder } from "@/lib/imageUploader";
 import Image from "next/image";
 
 const startupStatus = ["idea", "developing", "launched", "scaling", "acquired"] as const;
+const MAX_SCREENSHOTS = 15;
 
 const startupFormSchema = z.object({
   name: z.string().min(2, "Startup name must be at least 2 characters.").max(50, "Startup name is too long."),
@@ -85,18 +86,23 @@ export function CreateStartupForm() {
   const handleScreenshotFiles = (files: FileList | null) => {
     if (files) {
       const newFiles = Array.from(files);
-      // Basic validation (e.g., file type, size limit) could be added here
       const imageFiles = newFiles.filter(file => file.type.startsWith('image/'));
       if (imageFiles.length !== newFiles.length) {
         toast({ title: "Invalid File Type", description: "Only image files are allowed for screenshots.", variant: "destructive"});
       }
-      setSelectedScreenshotFiles(prevFiles => [...prevFiles, ...imageFiles].slice(0, 5)); // Limit to 5 screenshots for now
+      setSelectedScreenshotFiles(prevFiles => {
+        const combined = [...prevFiles, ...imageFiles];
+        if (combined.length > MAX_SCREENSHOTS) {
+          toast({ title: "Screenshot Limit Reached", description: `You can upload a maximum of ${MAX_SCREENSHOTS} screenshots.`, variant: "default"});
+        }
+        return combined.slice(0, MAX_SCREENSHOTS);
+      });
     }
   };
 
   const handleScreenshotInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     handleScreenshotFiles(event.target.files);
-     if (event.target) event.target.value = ""; // Reset input to allow re-selection of the same file
+     if (event.target) event.target.value = ""; 
   };
 
   const removeScreenshotFile = (index: number) => {
@@ -116,12 +122,16 @@ export function CreateStartupForm() {
     event.preventDefault();
     setIsDraggingOver(false);
     handleScreenshotFiles(event.dataTransfer.files);
-  }, []);
+  }, [handleScreenshotFiles]);
 
 
   async function onSubmit(data: StartupFormValues) {
     if (!user) {
       toast({ title: "Please sign in to create a startup.", variant: "destructive" });
+      return;
+    }
+    if (selectedScreenshotFiles.length > MAX_SCREENSHOTS) {
+      toast({ title: "Too Many Screenshots", description: `Please select no more than ${MAX_SCREENSHOTS} screenshots.`, variant: "destructive" });
       return;
     }
     setIsLoading(true);
@@ -147,7 +157,6 @@ export function CreateStartupForm() {
         } catch (error: any) {
           console.error(`Screenshot upload error for ${file.name}:`, error);
           toast({ title: "Screenshot Upload Failed", description: `Could not upload ${file.name}. ${error?.message || ""}`, variant: "destructive" });
-          // Decide if to stop or continue. For now, stop on first error.
           setIsLoading(false);
           return; 
         }
@@ -274,7 +283,7 @@ export function CreateStartupForm() {
 
             <FormItem>
               <FormLabel className="flex items-center gap-2">
-                <UploadCloud className="h-5 w-5 text-muted-foreground" /> Startup Screenshots (Optional, up to 5)
+                <UploadCloud className="h-5 w-5 text-muted-foreground" /> Startup Screenshots (Optional, up to {MAX_SCREENSHOTS})
               </FormLabel>
               <div 
                 className={`mt-1 flex justify-center rounded-md border-2 border-dashed px-6 pt-5 pb-6 transition-colors
@@ -293,12 +302,12 @@ export function CreateStartupForm() {
                     <input ref={screenshotInputRef} id="screenshot-upload" name="screenshot-upload" type="file" className="sr-only" multiple accept="image/*" onChange={handleScreenshotInputChange} />
                     <p className="pl-1">or drag and drop</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 10MB each</p>
+                  <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 10MB each. Max {MAX_SCREENSHOTS} files.</p>
                 </div>
               </div>
               {selectedScreenshotFiles.length > 0 && (
                 <div className="mt-4">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Selected screenshots:</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Selected screenshots ({selectedScreenshotFiles.length}/{MAX_SCREENSHOTS}):</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                     {selectedScreenshotFiles.map((file, index) => (
                       <div key={index} className="relative group aspect-square">
@@ -399,5 +408,6 @@ export function CreateStartupForm() {
     </Card>
   );
 }
+    
 
     

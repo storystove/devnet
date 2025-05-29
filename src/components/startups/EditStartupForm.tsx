@@ -31,6 +31,7 @@ import { uploadImagePlaceholder } from "@/lib/imageUploader";
 import Image from "next/image";
 
 const startupStatus = ["idea", "developing", "launched", "scaling", "acquired"] as const;
+const MAX_SCREENSHOTS = 15;
 
 const startupFormSchema = z.object({
   name: z.string().min(2, "Startup name must be at least 2 characters.").max(50, "Startup name is too long."),
@@ -85,7 +86,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
     });
     setLogoPreview(startup.logoUrl || null);
     setExistingScreenshotUrls(startup.screenshotUrls || []);
-    setNewScreenshotFiles([]); // Clear any new files when startup data changes
+    setNewScreenshotFiles([]); 
   }, [startup, form]);
 
 
@@ -97,7 +98,6 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
       setSelectedLogoFile(file);
       setLogoPreview(URL.createObjectURL(file));
     } else {
-      // If deselected, revert to original or clear if original was null
       setSelectedLogoFile(null); 
       setLogoPreview(startup.logoUrl || null);
     }
@@ -105,7 +105,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
   
   const removeLogo = () => {
     setSelectedLogoFile(null);
-    setLogoPreview(null); // This indicates intent to remove existing logo
+    setLogoPreview(null); 
     if (logoInputRef.current) logoInputRef.current.value = "";
   };
 
@@ -116,7 +116,14 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
        if (imageFiles.length !== newFilesArray.length) {
         toast({ title: "Invalid File Type", description: "Only image files are allowed for screenshots.", variant: "destructive"});
       }
-      setNewScreenshotFiles(prevFiles => [...prevFiles, ...imageFiles].slice(0, 5 - existingScreenshotUrls.length)); // Limit total screenshots
+      setNewScreenshotFiles(prevFiles => {
+        const combined = [...prevFiles, ...imageFiles];
+        const totalScreenshots = existingScreenshotUrls.length + combined.length;
+         if (totalScreenshots > MAX_SCREENSHOTS) {
+          toast({ title: "Screenshot Limit Reached", description: `You can upload a maximum of ${MAX_SCREENSHOTS} screenshots in total.`, variant: "default"});
+        }
+        return combined.slice(0, MAX_SCREENSHOTS - existingScreenshotUrls.length);
+      });
     }
   };
 
@@ -146,11 +153,15 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
     event.preventDefault();
     setIsDraggingOverScreenshots(false);
     handleNewScreenshotFiles(event.dataTransfer.files);
-  }, []);
+  }, [handleNewScreenshotFiles]);
 
   async function onSubmit(data: StartupFormValues) {
     if (!user || user.uid !== startup.creatorId) {
       toast({ title: "Unauthorized", description: "You are not allowed to edit this startup.", variant: "destructive" });
+      return;
+    }
+     if (existingScreenshotUrls.length + newScreenshotFiles.length > MAX_SCREENSHOTS) {
+      toast({ title: "Too Many Screenshots", description: `Please ensure the total number of screenshots does not exceed ${MAX_SCREENSHOTS}.`, variant: "destructive" });
       return;
     }
     setIsLoading(true);
@@ -164,7 +175,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
         setIsLoading(false);
         return;
       }
-    } else if (logoPreview === null) { // If preview is null, means user removed/cleared it
+    } else if (logoPreview === null && startup.logoUrl !== null) { 
         finalLogoUrl = null;
     }
 
@@ -183,7 +194,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
       }
     }
     
-    const finalScreenshotUrls = [...existingScreenshotUrls, ...uploadedNewScreenshotUrls].slice(0,5); // Combine and limit
+    const finalScreenshotUrls = [...existingScreenshotUrls, ...uploadedNewScreenshotUrls].slice(0, MAX_SCREENSHOTS); 
     
     const startupUpdateData: Partial<Startup> & { updatedAt: any } = {
       name: data.name,
@@ -301,12 +312,12 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
 
             <FormItem>
               <FormLabel className="flex items-center gap-2">
-                <UploadCloud className="h-5 w-5 text-muted-foreground" /> Startup Screenshots (Optional, up to 5 total)
+                <UploadCloud className="h-5 w-5 text-muted-foreground" /> Startup Screenshots (Optional, up to {MAX_SCREENSHOTS} total)
               </FormLabel>
               
               {existingScreenshotUrls.length > 0 && (
                 <div className="mt-2 mb-4">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Current screenshots:</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Current screenshots ({existingScreenshotUrls.length}/{MAX_SCREENSHOTS}):</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                     {existingScreenshotUrls.map((url, index) => (
                       <div key={url} className="relative group aspect-square">
@@ -334,30 +345,34 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
                 </div>
               )}
 
-              <FormLabel className="text-sm font-normal text-muted-foreground mt-4 block">Add new screenshots:</FormLabel>
-              <div 
-                className={`mt-1 flex justify-center rounded-md border-2 border-dashed px-6 pt-5 pb-6 transition-colors
-                  ${isDraggingOverScreenshots ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50'}`}
-                onDragOver={onScreenshotDragOver}
-                onDragLeave={onScreenshotDragLeave}
-                onDrop={onScreenshotDrop}
-                onClick={() => screenshotInputRef.current?.click()}
-              >
-                <div className="space-y-1 text-center">
-                  <FileImage className="mx-auto h-12 w-12 text-muted-foreground" />
-                  <div className="flex text-sm text-muted-foreground">
-                    <span className="relative cursor-pointer rounded-md bg-background font-medium text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:text-primary/80">
-                      Upload files
-                    </span>
-                    <input ref={screenshotInputRef} id="new-screenshot-upload" name="new-screenshot-upload" type="file" className="sr-only" multiple accept="image/*" onChange={handleScreenshotInputChange} />
-                    <p className="pl-1">or drag and drop</p>
+              {existingScreenshotUrls.length < MAX_SCREENSHOTS && (
+                <>
+                  <FormLabel className="text-sm font-normal text-muted-foreground mt-4 block">Add new screenshots:</FormLabel>
+                  <div 
+                    className={`mt-1 flex justify-center rounded-md border-2 border-dashed px-6 pt-5 pb-6 transition-colors
+                      ${isDraggingOverScreenshots ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50'}`}
+                    onDragOver={onScreenshotDragOver}
+                    onDragLeave={onScreenshotDragLeave}
+                    onDrop={onScreenshotDrop}
+                    onClick={() => screenshotInputRef.current?.click()}
+                  >
+                    <div className="space-y-1 text-center">
+                      <FileImage className="mx-auto h-12 w-12 text-muted-foreground" />
+                      <div className="flex text-sm text-muted-foreground">
+                        <span className="relative cursor-pointer rounded-md bg-background font-medium text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:text-primary/80">
+                          Upload files
+                        </span>
+                        <input ref={screenshotInputRef} id="new-screenshot-upload" name="new-screenshot-upload" type="file" className="sr-only" multiple accept="image/*" onChange={handleScreenshotInputChange} />
+                        <p className="pl-1">or drag and drop</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 10MB each. Up to {MAX_SCREENSHOTS - existingScreenshotUrls.length} more.</p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 10MB each</p>
-                </div>
-              </div>
+                </>
+              )}
               {newScreenshotFiles.length > 0 && (
                 <div className="mt-4">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">New screenshots to upload:</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">New screenshots to upload ({newScreenshotFiles.length}):</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                     {newScreenshotFiles.map((file, index) => (
                       <div key={index} className="relative group aspect-square">
@@ -383,7 +398,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
                   </div>
                 </div>
               )}
-              <FormDescription>Upload new screenshots. You can have up to 5 screenshots in total.</FormDescription>
+              <FormDescription>You can have up to {MAX_SCREENSHOTS} screenshots in total.</FormDescription>
             </FormItem>
 
             <FormField
