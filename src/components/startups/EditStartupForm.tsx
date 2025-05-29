@@ -153,7 +153,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
     event.preventDefault();
     setIsDraggingOverScreenshots(false);
     handleNewScreenshotFiles(event.dataTransfer.files);
-  }, [handleNewScreenshotFiles]);
+  }, []);
 
   async function onSubmit(data: StartupFormValues) {
     if (!user || user.uid !== startup.creatorId) {
@@ -196,12 +196,15 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
     
     const finalScreenshotUrls = [...existingScreenshotUrls, ...uploadedNewScreenshotUrls].slice(0, MAX_SCREENSHOTS); 
     
+    const techStackToSave = Array.isArray(data.techStack) ? data.techStack : [];
+    const tagsToSave = Array.isArray(data.tags) ? data.tags : [];
+
     const startupUpdateData: Partial<Startup> & { updatedAt: any } = {
       name: data.name,
       description: data.description,
       status: data.status,
-      techStack: data.techStack || [],
-      tags: data.tags || [],
+      techStack: techStackToSave,
+      tags: tagsToSave,
       websiteUrl: data.websiteUrl || null,
       logoUrl: finalLogoUrl,
       screenshotUrls: finalScreenshotUrls.length > 0 ? finalScreenshotUrls : null,
@@ -437,7 +440,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
                         placeholder="e.g., React, Node.js, Python"
                       />
                   </FormControl>
-                  <FormDescription>List the main technologies your startup uses. Max 10.</FormDescription>
+                  <FormDescription>List the main technologies. Add each item individually by typing and pressing Enter. Max 10.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -457,7 +460,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
                         contentForSuggestions={descriptionContent}
                       />
                   </FormControl>
-                  <FormDescription>Help people discover your startup. Max 10.</FormDescription>
+                  <FormDescription>Help people discover your startup. Add each tag individually by typing and pressing Enter. Max 10.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -473,5 +476,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
     </Card>
   );
 }
+
+    
 
     

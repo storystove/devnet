@@ -122,7 +122,7 @@ export function CreateStartupForm() {
     event.preventDefault();
     setIsDraggingOver(false);
     handleScreenshotFiles(event.dataTransfer.files);
-  }, [handleScreenshotFiles]);
+  }, []);
 
 
   async function onSubmit(data: StartupFormValues) {
@@ -163,13 +163,16 @@ export function CreateStartupForm() {
       }
     }
     
+    const techStackToSave = Array.isArray(data.techStack) ? data.techStack : [];
+    const tagsToSave = Array.isArray(data.tags) ? data.tags : [];
+
     const startupData: Omit<Startup, "id" | "createdAt"> & { createdAt: any } = {
       name: data.name,
       logoUrl: logoUrl,
       description: data.description,
       status: data.status,
-      techStack: data.techStack || [],
-      tags: data.tags || [],
+      techStack: techStackToSave,
+      tags: tagsToSave,
       websiteUrl: data.websiteUrl || null,
       screenshotUrls: uploadedScreenshotUrls.length > 0 ? uploadedScreenshotUrls : null,
       creatorId: user.uid,
@@ -372,7 +375,7 @@ export function CreateStartupForm() {
                         placeholder="e.g., React, Node.js, Python"
                       />
                   </FormControl>
-                  <FormDescription>List the main technologies your startup uses. Max 10.</FormDescription>
+                  <FormDescription>List the main technologies. Add each item individually by typing and pressing Enter. Max 10.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -392,7 +395,7 @@ export function CreateStartupForm() {
                         contentForSuggestions={descriptionContent}
                       />
                   </FormControl>
-                  <FormDescription>Help people discover your startup. Max 10.</FormDescription>
+                  <FormDescription>Help people discover your startup. Add each tag individually by typing and pressing Enter. Max 10.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -408,6 +411,8 @@ export function CreateStartupForm() {
     </Card>
   );
 }
+    
+
     
 
     
