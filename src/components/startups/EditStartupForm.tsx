@@ -90,7 +90,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
   }, [startup, form]);
 
 
-  const descriptionContent = form.watch("description");
+  // const descriptionContent = form.watch("description"); // Temporarily remove for testing
 
   const handleLogoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -438,6 +438,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
                         value={field.value || []}
                         onChange={field.onChange}
                         placeholder="e.g., React, Node.js, Python"
+                        // contentForSuggestions={descriptionContent} // Temporarily removed
                       />
                   </FormControl>
                   <FormDescription>List the main technologies. Add each item individually by typing and pressing Enter. Max 10.</FormDescription>
@@ -457,7 +458,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
                         value={field.value || []}
                         onChange={field.onChange}
                         placeholder="e.g., SaaS, AI, Fintech"
-                        contentForSuggestions={descriptionContent}
+                        // contentForSuggestions={descriptionContent} // Temporarily removed
                       />
                   </FormControl>
                   <FormDescription>Help people discover your startup. Add each tag individually by typing and pressing Enter. Max 10.</FormDescription>
