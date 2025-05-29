@@ -1,11 +1,12 @@
+
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, ChangeEvent, KeyboardEvent } from 'react'; // Added explicit types
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { X as LucideX, Brain, Loader2 } from 'lucide-react';
-import { suggestTags, SuggestTagsInput } from '@/ai/flows/suggest-tags'; // Assuming server action
+import { suggestTags, SuggestTagsInput } from '@/ai/flows/suggest-tags';
 import { useToast } from '@/hooks/use-toast';
 
 interface TagInputProps {
@@ -13,51 +14,54 @@ interface TagInputProps {
   value: string[];
   onChange: (tags: string[]) => void;
   placeholder?: string;
-  contentForSuggestions?: string; // Text content to base AI suggestions on
+  contentForSuggestions?: string;
 }
 
-export function TagInput({
+// Wrap TagInput with React.memo
+const TagInputComponent = ({
   id,
   value = [],
   onChange,
   placeholder = "Add tags...",
   contentForSuggestions,
-}: TagInputProps) {
+}: TagInputProps) => {
   const [inputValue, setInputValue] = useState('');
   const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const { toast } = useToast();
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
   };
 
-  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && inputValue.trim() !== '') {
       e.preventDefault();
       addTag(inputValue.trim());
       setInputValue('');
+      // Clear suggestions after adding a tag from input
+      if (suggestedTags.length > 0) setSuggestedTags([]);
     } else if (e.key === 'Backspace' && inputValue === '' && value.length > 0) {
       removeTag(value[value.length - 1]);
     }
   };
 
-  const addTag = (tag: string) => {
-    const newTag = tag.toLowerCase();
+  const addTag = useCallback((tag: string) => {
+    const newTag = tag.toLowerCase().trim();
     if (newTag && !value.includes(newTag)) {
       onChange([...value, newTag]);
     }
-  };
+  }, [value, onChange]);
 
-  const removeTag = (tagToRemove: string) => {
+  const removeTag = useCallback((tagToRemove: string) => {
     onChange(value.filter(tag => tag !== tagToRemove));
-  };
+  }, [value, onChange]);
 
   const handleSuggestTags = useCallback(async () => {
     if (!contentForSuggestions || contentForSuggestions.trim().length < 10) {
       toast({
         title: "Not enough content",
-        description: "Please provide more content to generate tag suggestions.",
+        description: "Please provide more content (at least 10 characters) to generate tag suggestions.",
         variant: "default",
       });
       return;
@@ -68,8 +72,18 @@ export function TagInput({
       const input: SuggestTagsInput = { content: contentForSuggestions };
       const result = await suggestTags(input);
       if (result && result.tags) {
-        setSuggestedTags(result.tags.map(tag => tag.toLowerCase()));
-        toast({ title: "Suggestions loaded!"});
+        // Filter out tags already present in the main value array
+        const newSuggestions = result.tags
+          .map(tag => tag.toLowerCase().trim())
+          .filter(tag => tag && !value.includes(tag));
+        setSuggestedTags(newSuggestions);
+        if (newSuggestions.length > 0) {
+            toast({ title: "Suggestions loaded!"});
+        } else if (result.tags.length > 0) {
+            toast({ title: "Suggestions loaded (already added or similar)." });
+        } else {
+            toast({ title: "No new suggestions found."});
+        }
       } else {
         toast({ title: "Could not get suggestions.", variant: "destructive"});
       }
@@ -79,17 +93,17 @@ export function TagInput({
     } finally {
       setIsLoadingSuggestions(false);
     }
-  }, [contentForSuggestions, toast]);
+  }, [contentForSuggestions, toast, value]); // Added value to dependencies of handleSuggestTags
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2 mb-2">
+      <div className="flex flex-wrap gap-2 mb-2 min-h-[24px]">
         {value.map(tag => (
           <Badge key={tag} variant="secondary" className="py-1 px-2 text-sm">
             {tag}
             <button
               type="button"
-              className="ml-1.5 -mr-0.5 p-0.5 rounded-full hover:bg-muted-foreground/20"
+              className="ml-1.5 -mr-0.5 p-0.5 rounded-full hover:bg-muted-foreground/20 focus:outline-none focus:ring-1 focus:ring-ring"
               onClick={() => removeTag(tag)}
               aria-label={`Remove ${tag}`}
             >
@@ -120,26 +134,29 @@ export function TagInput({
         )}
       </div>
       {suggestedTags.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          <p className="text-sm text-muted-foreground w-full mb-1">Suggestions:</p>
-          {suggestedTags.map(tag => (
-            <Button
-              key={tag}
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                addTag(tag);
-                setSuggestedTags(prev => prev.filter(t => t !== tag));
-              }}
-              disabled={value.includes(tag)}
-              className={value.includes(tag) ? "opacity-50 cursor-not-allowed" : ""}
-            >
-              {tag}
-            </Button>
-          ))}
+        <div className="mt-2">
+          <p className="text-sm text-muted-foreground mb-1">Suggestions (click to add):</p>
+          <div className="flex flex-wrap gap-1.5">
+            {suggestedTags.map(tag => (
+              <Button
+                key={tag}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  addTag(tag);
+                  setSuggestedTags(prev => prev.filter(t => t !== tag));
+                }}
+                className="text-xs"
+              >
+                {tag}
+              </Button>
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
-}
+};
+
+export const TagInput = React.memo(TagInputComponent);
