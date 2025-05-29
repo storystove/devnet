@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from "next/image";
@@ -8,13 +9,19 @@ import { Button } from "@/components/ui/button";
 import type { Startup } from "@/types";
 import { Users, Eye, ArrowRight } from "lucide-react";
 import { formatDistanceToNow } from 'date-fns';
+import type { Timestamp } from "firebase/firestore";
 
 interface StartupCardProps {
   startup: Startup;
 }
 
 export function StartupCard({ startup }: StartupCardProps) {
-  const timeAgo = startup.createdAt ? formatDistanceToNow(new Date(startup.createdAt), { addSuffix: true }) : '';
+  // Convert Firestore Timestamp to JavaScript Date if startup.createdAt exists and has a toDate method
+  const createdAtDate = startup.createdAt && (startup.createdAt as Timestamp).toDate
+    ? (startup.createdAt as Timestamp).toDate()
+    : new Date(); // Fallback, though createdAt should ideally always be a Timestamp from Firestore
+
+  const timeAgo = startup.createdAt ? formatDistanceToNow(createdAtDate, { addSuffix: true }) : '';
   
   return (
     <Card className="flex flex-col h-full shadow-lg hover:shadow-xl transition-shadow duration-300">
