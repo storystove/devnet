@@ -1,48 +1,96 @@
+
+"use client";
+
 import { AppLayout } from "@/components/layout/AppLayout";
 import { StartupDetails } from "@/components/startups/StartupDetails";
 import type { Startup } from "@/types";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import type { Metadata } from 'next';
-
-// Mock data for demonstration
-const mockStartup: Startup = {
-  id: "startup1",
-  name: "AI Innovations",
-  logoUrl: "https://placehold.co/200x200.png",
-  status: "developing",
-  description: "Pioneering new frontiers in artificial intelligence and machine learning solutions for enterprise. Our mission is to democratize AI and make it accessible for businesses of all sizes. We are building a suite of tools that leverage cutting-edge algorithms to solve real-world problems, from data analysis to automated decision making.",
-  techStack: ["Python", "TensorFlow", "PyTorch", "Kubernetes", "Docker", "React", "Node.js"],
-  coFounderIds: ["user1", "user2"],
-  followerCount: 125,
-  createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5), // 5 days ago
-  tags: ["ai", "machine learning", "enterprise", "saas", "big data", "automation"],
-};
+import { use, useEffect, useState } from 'react';
+import { doc, getDoc, Timestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 interface StartupPageProps {
   params: { startupId: string };
 }
 
-export async function generateMetadata({ params }: StartupPageProps): Promise<Metadata> {
-  // In a real app, fetch startup data here
-  const startup = mockStartup; // Using mock data
-  return {
-    title: `${startup.name} | DevNet`,
-    description: startup.description.substring(0,160),
-  };
-}
+// Metadata might be limited if page is client-rendered for data
+// export async function generateMetadata({ params }: StartupPageProps): Promise<Metadata> {
+//   // In a real app, fetch startup data here
+//   // const startup = await fetchStartupData(params.startupId);
+//   // return {
+//   //   title: `${startup?.name || 'Startup'} | DevNet`,
+//   //   description: startup?.description.substring(0,160) || "View startup details on DevNet",
+//   // };
+//   return { title: "Startup | DevNet" }
+// }
 
 
-export default function StartupPage({ params }: StartupPageProps) {
-  // In a real app, you would fetch startup data based on params.startupId
-  const startup = mockStartup; // Using mock data
+export default function StartupPage({ params: paramsFromProps }: StartupPageProps) {
+  const params = use(paramsFromProps); // Unwrap promise for params
+  const { toast } = useToast();
+  
+  const [startup, setStartup] = useState<Startup | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (params.startupId) {
+      setIsLoading(true);
+      const fetchStartup = async () => {
+        try {
+          const startupRef = doc(db, "startups", params.startupId);
+          const docSnap = await getDoc(startupRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+             setStartup({ 
+              id: docSnap.id, 
+              ...data,
+              createdAt: data.createdAt as Timestamp // Ensure correct type
+            } as Startup);
+          } else {
+            toast({ title: "Startup not found", description: "This startup does not exist or was removed.", variant: "destructive" });
+            setStartup(null);
+          }
+        } catch (error) {
+          console.error("Error fetching startup:", error);
+          toast({ title: "Error", description: "Could not fetch startup details.", variant: "destructive" });
+          setStartup(null);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchStartup();
+    }
+  }, [params.startupId, toast]);
+
+  useEffect(() => {
+    if (startup?.name) {
+      document.title = `${startup.name} | DevNet`;
+    } else if (!isLoading && !startup) {
+      document.title = "Startup Not Found | DevNet";
+    } else {
+      document.title = "Startup | DevNet";
+    }
+  }, [startup, isLoading]);
+
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="container mx-auto max-w-4xl py-8 flex justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   if (!startup) {
     return (
       <AppLayout>
         <div className="container mx-auto py-8 text-center">
-          <p>Startup not found.</p>
+          <p className="text-xl text-muted-foreground">Startup not found.</p>
            <Button variant="link" asChild className="mt-4">
             <Link href="/startups">
                 <ArrowLeft className="mr-2 h-4 w-4" />

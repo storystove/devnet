@@ -1,5 +1,6 @@
+
 import type { User as FirebaseUser } from "firebase/auth";
-import type { Timestamp } from "firebase/firestore";
+import type { Timestamp, FieldValue } from "firebase/firestore";
 
 export interface UserProfile {
   id: string; // UID from Firebase Auth
@@ -56,8 +57,12 @@ export interface CommunityRoom {
   id: string;
   name: string;
   description?: string;
-  memberCount: number;
   topic: string;
+  creatorId: string;
+  creatorDisplayName?: string | null;
+  creatorAvatarUrl?: string | null;
+  memberCount: number;
+  createdAt: Timestamp | FieldValue; // FieldValue for serverTimestamp on create
   pinnedMessageId?: string;
   // Messages will be in Realtime Database
 }
@@ -65,13 +70,14 @@ export interface CommunityRoom {
 export interface Startup {
   id: string;
   name: string;
-  logoUrl?: string;
+  logoUrl?: string | null;
   status: "idea" | "developing" | "launched" | "scaling" | "acquired";
   description: string;
   techStack?: string[];
-  coFounderIds?: string[]; // Array of user IDs
-  followerCount?: number;
-  createdAt: Timestamp; // Firestore Timestamp
+  creatorId: string;
+  coFounderIds: string[]; // Array of user IDs, creator is first
+  followerCount: number;
+  createdAt: Timestamp | FieldValue; // FieldValue for serverTimestamp on create
   tags?: string[];
 }
 

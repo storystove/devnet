@@ -1,43 +1,88 @@
+
+"use client";
+
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ChatInterface } from "@/components/rooms/ChatInterface";
 import type { CommunityRoom } from "@/types";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import type { Metadata } from 'next';
-
-// Mock data for demonstration
-const mockRoom: CommunityRoom = {
-  id: "room1",
-  name: "Frontend Developers Hangout",
-  description: "A place for frontend devs to discuss frameworks, tools, and best practices.",
-  memberCount: 125,
-  topic: "Frontend Development",
-};
+import { use, useEffect, useState } from 'react';
+import { doc, getDoc, Timestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 interface RoomPageProps {
   params: { roomId: string };
 }
 
+// Metadata might be limited if page is client-rendered for data
+// export async function generateMetadata({ params }: RoomPageProps): Promise<Metadata> {
+//   // Fetch room data for metadata
+//   return { title: "Community Room | DevNet" };
+// }
 
-export async function generateMetadata({ params }: RoomPageProps): Promise<Metadata> {
-  // In a real app, fetch room data here
-  const room = mockRoom; // Using mock data
-  return {
-    title: `${room.name} | DevNet`,
-    description: `Join the conversation in ${room.name} community room.`,
-  };
-}
+export default function RoomPage({ params: paramsFromProps }: RoomPageProps) {
+  const params = use(paramsFromProps); // Unwrap promise for params
+  const { toast } = useToast();
+  const [room, setRoom] = useState<CommunityRoom | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-export default function RoomPage({ params }: RoomPageProps) {
-  // In a real app, you would fetch room data based on params.roomId
-  const room = mockRoom; // Using mock data
+  useEffect(() => {
+    if (params.roomId) {
+      setIsLoading(true);
+      const fetchRoom = async () => {
+        try {
+          const roomRef = doc(db, "communityRooms", params.roomId);
+          const docSnap = await getDoc(roomRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setRoom({ 
+              id: docSnap.id,
+              ...data,
+              createdAt: data.createdAt as Timestamp // Ensure correct type
+            } as CommunityRoom);
+          } else {
+            toast({ title: "Room not found", description: "This room does not exist or was removed.", variant: "destructive" });
+            setRoom(null);
+          }
+        } catch (error) {
+          console.error("Error fetching room:", error);
+          toast({ title: "Error", description: "Could not fetch room details.", variant: "destructive" });
+          setRoom(null);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchRoom();
+    }
+  }, [params.roomId, toast]);
+
+  useEffect(() => {
+    if (room?.name) {
+      document.title = `${room.name} | DevNet`;
+    } else if (!isLoading && !room) {
+      document.title = "Room Not Found | DevNet";
+    } else {
+      document.title = "Community Room | DevNet";
+    }
+  }, [room, isLoading]);
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="container mx-auto py-8 flex justify-center items-center h-full">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   if (!room) {
     return (
       <AppLayout>
         <div className="container mx-auto py-8 text-center">
-          <p>Community room not found.</p>
+          <p className="text-xl text-muted-foreground">Community room not found.</p>
           <Button variant="link" asChild className="mt-4">
             <Link href="/rooms">
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -51,9 +96,7 @@ export default function RoomPage({ params }: RoomPageProps) {
 
   return (
     <AppLayout>
-      {/* The AppLayout already provides padding, so we might not need a container here, 
-          or ChatInterface should be designed to fill height. */}
-      <div className="h-full"> {/* Ensure this div takes up available height */}
+      <div className="h-full"> {/* ChatInterface should handle its own height */}
         <ChatInterface room={room} />
       </div>
     </AppLayout>

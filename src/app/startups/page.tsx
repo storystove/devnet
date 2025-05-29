@@ -1,57 +1,57 @@
+
+"use client";
+
 import { AppLayout } from "@/components/layout/AppLayout";
 import { StartupCard } from "@/components/startups/StartupCard";
 import { Button } from "@/components/ui/button";
 import type { Startup } from "@/types";
 import Link from "next/link";
-import { PlusCircle, Rocket } from "lucide-react";
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = {
-  title: 'Startup Showcase | DevNet',
-  description: 'Discover innovative startups on DevNet.',
-};
-
-// Mock data for demonstration
-const mockStartups: Startup[] = [
-  {
-    id: "startup1",
-    name: "AI Innovations",
-    logoUrl: "https://placehold.co/100x100.png",
-    status: "developing",
-    description: "Pioneering new frontiers in artificial intelligence and machine learning solutions for enterprise.",
-    techStack: ["Python", "TensorFlow", "Kubernetes"],
-    coFounderIds: ["user1", "user2"],
-    followerCount: 120,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5), // 5 days ago
-    tags: ["ai", "machine learning", "enterprise", "saas"],
-  },
-  {
-    id: "startup2",
-    name: "EcoFriendly Packaging",
-    logoUrl: "https://placehold.co/100x100.png",
-    status: "launched",
-    description: "Revolutionizing the packaging industry with sustainable and biodegradable materials.",
-    techStack: ["Shopify", "React", "Node.js"],
-    coFounderIds: ["user3"],
-    followerCount: 350,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30), // 30 days ago
-    tags: ["sustainability", "ecommerce", "green tech"],
-  },
-  {
-    id: "startup3",
-    name: "DevConnect Platform",
-    logoUrl: "https://placehold.co/100x100.png",
-    status: "idea",
-    description: "A new platform to connect developers with exciting projects and collaborators.",
-    techStack: ["Next.js", "Firebase", "Tailwind CSS"],
-    coFounderIds: [],
-    followerCount: 15,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), // 2 days ago
-    tags: ["developer tools", "community", "collaboration"],
-  },
-];
+import { PlusCircle, Rocket, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { collection, query, orderBy, getDocs, Timestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 export default function StartupsPage() {
+  const [startups, setStartups] = useState<Startup[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchStartups = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const startupsRef = collection(db, "startups");
+        const q = query(startupsRef, orderBy("createdAt", "desc"));
+        const querySnapshot = await getDocs(q);
+        const fetchedStartups = querySnapshot.docs.map(doc => {
+          const data = doc.data();
+          return { 
+            id: doc.id, 
+            ...data,
+            // Ensure createdAt is correctly typed for StartupCard.
+            // It should already be a Timestamp if fetched from Firestore.
+            createdAt: data.createdAt as Timestamp 
+          } as Startup;
+        });
+        setStartups(fetchedStartups);
+      } catch (err: any) {
+        console.error("Error fetching startups:", err);
+        setError("Failed to load startups. Please try again later.");
+        toast({
+          title: "Error",
+          description: "Could not fetch startups.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchStartups();
+  }, [toast]);
+
   return (
     <AppLayout>
       <div className="container mx-auto py-4">
@@ -63,13 +63,28 @@ export default function StartupsPage() {
             </Link>
           </Button>
         </div>
-        {mockStartups.length > 0 ? (
+
+        {isLoading && (
+          <div className="flex justify-center items-center py-10">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          </div>
+        )}
+
+        {!isLoading && error && (
+          <div className="text-center py-10 text-destructive">
+            <p>{error}</p>
+          </div>
+        )}
+
+        {!isLoading && !error && startups.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {mockStartups.map((startup) => (
+            {startups.map((startup) => (
               <StartupCard key={startup.id} startup={startup} />
             ))}
           </div>
-        ) : (
+        )}
+        
+        {!isLoading && !error && startups.length === 0 && (
            <div className="text-center py-10">
             <Rocket className="mx-auto h-12 w-12 text-muted-foreground" />
             <h3 className="mt-2 text-xl font-semibold">No Startups Yet</h3>

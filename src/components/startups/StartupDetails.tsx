@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from "next/image";
@@ -5,23 +6,23 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Startup, UserProfile } from "@/types"; // Assuming UserProfile type exists
+import type { Startup } from "@/types";
 import { Users, Tag, Layers, CalendarDays, MessageSquare, UserPlus, Heart, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
+import type { Timestamp } from "firebase/firestore"; // Import Timestamp
+import Link from "next/link";
+
 
 interface StartupDetailsProps {
   startup: Startup;
-  coFounders?: Partial<UserProfile>[]; // Optional: Pass co-founder profiles
 }
 
-// Mock co-founder for display
-const mockCoFounders: Partial<UserProfile>[] = [
-    { id: 'user1', displayName: 'Jane Doe', avatarUrl: 'https://placehold.co/80x80.png' },
-    { id: 'user2', displayName: 'John Smith', avatarUrl: 'https://placehold.co/80x80.png' }
-];
+export function StartupDetails({ startup }: StartupDetailsProps) {
+  const createdAtDate = (startup.createdAt as Timestamp)?.toDate ? (startup.createdAt as Timestamp).toDate() : new Date();
 
+  // In a real app, you would fetch co-founder profiles based on startup.coFounderIds
+  // For now, we'll just display the count or their UIDs if needed.
 
-export function StartupDetails({ startup, coFounders = mockCoFounders }: StartupDetailsProps) {
   return (
     <div className="space-y-8">
       <Card className="overflow-hidden shadow-xl">
@@ -46,7 +47,7 @@ export function StartupDetails({ startup, coFounders = mockCoFounders }: Startup
               <Badge variant="secondary" className="capitalize text-sm py-1 px-2">{startup.status}</Badge>
               <p className="text-sm text-muted-foreground mt-2 flex items-center">
                 <CalendarDays className="mr-2 h-4 w-4" />
-                Launched: {startup.createdAt ? format(new Date(startup.createdAt), "MMMM d, yyyy") : "N/A"}
+                Created: {format(createdAtDate, "MMMM d, yyyy")}
               </p>
             </div>
           </div>
@@ -79,33 +80,29 @@ export function StartupDetails({ startup, coFounders = mockCoFounders }: Startup
 
           <div>
             <h3 className="text-lg font-semibold mb-3 flex items-center"><Users className="mr-2 h-5 w-5 text-primary" />Co-Founders</h3>
-            {coFounders && coFounders.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {coFounders.map((founder) => (
-                  <Card key={founder.id} className="p-3">
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarImage src={founder.avatarUrl || undefined} alt={founder.displayName || "Founder"} data-ai-hint="profile avatar" />
-                        <AvatarFallback>{founder.displayName?.charAt(0).toUpperCase()}</AvatarFallback>
-                      </Avatar>
-                      <span className="font-medium text-sm">{founder.displayName || "Anonymous Founder"}</span>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+            {startup.coFounderIds && startup.coFounderIds.length > 0 ? (
+              <p className="text-sm text-muted-foreground">{startup.coFounderIds.length} co-founder(s). {/* Details can be expanded later */}</p>
+              // For more detail, you might map over coFounderIds and fetch profiles, or display placeholder cards
+              // <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              //   {startup.coFounderIds.map((founderId) => (
+              //     <Card key={founderId} className="p-3">
+              //       <Link href={`/profile/${founderId}`}>View Profile: {founderId.substring(0,8)}...</Link>
+              //     </Card>
+              //   ))}
+              // </div>
             ) : <p className="text-sm text-muted-foreground">Co-founder information not available.</p>}
           </div>
         </CardContent>
       </Card>
 
       <div className="flex flex-col sm:flex-row gap-3">
-        <Button size="lg" className="flex-1">
+        <Button size="lg" className="flex-1" disabled> {/* TODO: Implement follow startup */}
           <Heart className="mr-2 h-5 w-5" /> Follow Startup ({startup.followerCount || 0})
         </Button>
-        <Button size="lg" variant="outline" className="flex-1">
+        <Button size="lg" variant="outline" className="flex-1" disabled> {/* TODO: Implement join team */}
           <UserPlus className="mr-2 h-5 w-5" /> Join Team (Request)
         </Button>
-        <Button size="lg" variant="outline" className="flex-1">
+        <Button size="lg" variant="outline" className="flex-1" disabled> {/* TODO: Implement comments */}
           <MessageSquare className="mr-2 h-5 w-5" /> Comment
         </Button>
       </div>

@@ -1,7 +1,8 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,16 +23,21 @@ import { useToast } from "@/hooks/use-toast";
 import { TagInput } from "@/components/shared/TagInput";
 import { useState } from "react";
 import { Rocket, Loader2 } from "lucide-react";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useRouter } from "next/navigation";
+import type { Startup } from "@/types";
+
 
 const startupStatus = ["idea", "developing", "launched", "scaling", "acquired"] as const;
 
 const startupFormSchema = z.object({
   name: z.string().min(2, "Startup name must be at least 2 characters.").max(50, "Startup name is too long."),
-  logoUrl: z.string().url("Invalid logo URL.").optional().or(z.literal("")),
+  logoUrl: z.string().url("Invalid logo URL (must be a full URL e.g., https://...).").optional().or(z.literal("")),
   description: z.string().min(20, "Description must be at least 20 characters.").max(1000, "Description is too long."),
   status: z.enum(startupStatus),
-  techStack: z.array(z.string()).optional(), // Using TagInput for this as well
-  tags: z.array(z.string()).optional(),
+  techStack: z.array(z.string()).max(10, "You can add up to 10 tech stack items.").optional(),
+  tags: z.array(z.string()).max(10, "You can add up to 10 tags.").optional(),
 });
 
 type StartupFormValues = z.infer<typeof startupFormSchema>;
@@ -39,6 +45,7 @@ type StartupFormValues = z.infer<typeof startupFormSchema>;
 export function CreateStartupForm() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<StartupFormValues>({
@@ -53,7 +60,7 @@ export function CreateStartupForm() {
     },
   });
 
-  const descriptionContent = form.watch("description"); // For tag suggestions
+  const descriptionContent = form.watch("description");
 
   async function onSubmit(data: StartupFormValues) {
     if (!user) {
@@ -61,13 +68,35 @@ export function CreateStartupForm() {
       return;
     }
     setIsLoading(true);
-    console.log("Creating startup:", data);
-    // TODO: Implement actual startup creation logic (e.g., save to Firestore)
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
     
-    toast({ title: "Startup created!", description: `${data.name} is now showcased.` });
-    form.reset();
-    setIsLoading(false);
+    const startupData: Omit<Startup, "id" | "createdAt"> & { createdAt: any } = {
+      name: data.name,
+      logoUrl: data.logoUrl || null,
+      description: data.description,
+      status: data.status,
+      techStack: data.techStack || [],
+      tags: data.tags || [],
+      creatorId: user.uid,
+      coFounderIds: [user.uid], // Creator is the first co-founder
+      followerCount: 0,
+      createdAt: serverTimestamp(),
+    };
+
+    try {
+      const docRef = await addDoc(collection(db, "startups"), startupData);
+      toast({ title: "Startup created!", description: `${data.name} is now showcased.` });
+      form.reset();
+      router.push(`/startups/${docRef.id}`); // Redirect to the new startup's page
+    } catch (error: any) {
+      console.error("Error creating startup:", error);
+      toast({
+        title: "Startup Creation Failed",
+        description: error.message || "Could not save your startup.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -99,8 +128,9 @@ export function CreateStartupForm() {
                 <FormItem>
                   <FormLabel>Logo URL (Optional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="https://example.com/logo.png" {...field} />
+                    <Input type="url" placeholder="https://example.com/logo.png" {...field} />
                   </FormControl>
+                  <FormDescription>Must be a valid URL (e.g., https://placehold.co/100x100.png)</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -152,7 +182,7 @@ export function CreateStartupForm() {
               name="techStack"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tech Stack</FormLabel>
+                  <FormLabel>Tech Stack (Optional)</FormLabel>
                   <FormControl>
                      <TagInput
                         value={field.value || []}
@@ -160,7 +190,7 @@ export function CreateStartupForm() {
                         placeholder="e.g., React, Node.js, Python"
                       />
                   </FormControl>
-                  <FormDescription>List the main technologies your startup uses.</FormDescription>
+                  <FormDescription>List the main technologies your startup uses. Max 10.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -171,7 +201,7 @@ export function CreateStartupForm() {
               name="tags"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tags</FormLabel>
+                  <FormLabel>Tags (Optional)</FormLabel>
                   <FormControl>
                      <TagInput
                         value={field.value || []}
@@ -180,7 +210,7 @@ export function CreateStartupForm() {
                         contentForSuggestions={descriptionContent}
                       />
                   </FormControl>
-                  <FormDescription>Help people discover your startup.</FormDescription>
+                  <FormDescription>Help people discover your startup. Max 10.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
