@@ -109,7 +109,7 @@ export function DirectMessageInterface({ chatId, currentUser, otherUser }: Direc
           fromUserAvatarUrl: currentUser.photoURL || null,
           chatId: chatId,
           messageSnippet: lastMessageText.substring(0, 50) + (lastMessageText.length > 50 ? "..." : ""),
-          timestamp: serverTimestamp(),
+          timestamp: firestoreServerTimestamp(), // Corrected to use alias
           read: false,
           link: `/messages/${chatId}`
       });
@@ -231,3 +231,4 @@ export function DirectMessageInterface({ chatId, currentUser, otherUser }: Direc
     </div>
   );
 }
+
