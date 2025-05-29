@@ -21,23 +21,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/providers/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
 import { TagInput } from "@/components/shared/TagInput";
-import { useState } from "react";
-import { Rocket, Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
+import { Rocket, Loader2, FileUp, Link as LinkIconLucide } from "lucide-react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import type { Startup } from "@/types";
-
+import { uploadImagePlaceholder } from "@/lib/imageUploader";
 
 const startupStatus = ["idea", "developing", "launched", "scaling", "acquired"] as const;
 
 const startupFormSchema = z.object({
   name: z.string().min(2, "Startup name must be at least 2 characters.").max(50, "Startup name is too long."),
-  logoUrl: z.string().url("Invalid logo URL (must be a full URL e.g., https://...).").optional().or(z.literal("")),
   description: z.string().min(20, "Description must be at least 20 characters.").max(1000, "Description is too long."),
   status: z.enum(startupStatus),
   techStack: z.array(z.string()).max(10, "You can add up to 10 tech stack items.").optional(),
   tags: z.array(z.string()).max(10, "You can add up to 10 tags.").optional(),
+  websiteUrl: z.string().url("Invalid website URL (must be a full URL e.g., https://...).").optional().or(z.literal("")),
 });
 
 type StartupFormValues = z.infer<typeof startupFormSchema>;
@@ -47,20 +47,40 @@ export function CreateStartupForm() {
   const { toast } = useToast();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [selectedScreenshotFile, setSelectedScreenshotFile] = useState<File | null>(null);
+  const screenshotInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<StartupFormValues>({
     resolver: zodResolver(startupFormSchema),
     defaultValues: {
       name: "",
-      logoUrl: "",
       description: "",
       status: "idea",
       techStack: [],
       tags: [],
+      websiteUrl: "",
     },
   });
 
   const descriptionContent = form.watch("description");
+
+  const handleLogoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setSelectedLogoFile(event.target.files[0]);
+    } else {
+      setSelectedLogoFile(null);
+    }
+  };
+
+  const handleScreenshotFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setSelectedScreenshotFile(event.target.files[0]);
+    } else {
+      setSelectedScreenshotFile(null);
+    }
+  };
 
   async function onSubmit(data: StartupFormValues) {
     if (!user) {
@@ -68,16 +88,43 @@ export function CreateStartupForm() {
       return;
     }
     setIsLoading(true);
+
+    let logoUrl: string | null = null;
+    if (selectedLogoFile) {
+      try {
+        logoUrl = await uploadImagePlaceholder(selectedLogoFile);
+      } catch (error: any) {
+        console.error("Logo upload error:", error);
+        toast({ title: "Logo Upload Failed", description: error?.message || "Could not process the logo.", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    let screenshotUrls: string[] = [];
+    if (selectedScreenshotFile) {
+      try {
+        const screenshotUrl = await uploadImagePlaceholder(selectedScreenshotFile);
+        screenshotUrls.push(screenshotUrl);
+      } catch (error: any) {
+        console.error("Screenshot upload error:", error);
+        toast({ title: "Screenshot Upload Failed", description: error?.message || "Could not process the screenshot.", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+    }
     
     const startupData: Omit<Startup, "id" | "createdAt"> & { createdAt: any } = {
       name: data.name,
-      logoUrl: data.logoUrl || null,
+      logoUrl: logoUrl,
       description: data.description,
       status: data.status,
       techStack: data.techStack || [],
       tags: data.tags || [],
+      websiteUrl: data.websiteUrl || null,
+      screenshotUrls: screenshotUrls.length > 0 ? screenshotUrls : null,
       creatorId: user.uid,
-      coFounderIds: [user.uid], // Creator is the first co-founder
+      coFounderIds: [user.uid], 
       followerCount: 0,
       createdAt: serverTimestamp(),
     };
@@ -86,7 +133,11 @@ export function CreateStartupForm() {
       const docRef = await addDoc(collection(db, "startups"), startupData);
       toast({ title: "Startup created!", description: `${data.name} is now showcased.` });
       form.reset();
-      router.push(`/startups/${docRef.id}`); // Redirect to the new startup's page
+      setSelectedLogoFile(null);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+      setSelectedScreenshotFile(null);
+      if (screenshotInputRef.current) screenshotInputRef.current.value = "";
+      router.push(`/startups/${docRef.id}`);
     } catch (error: any) {
       console.error("Error creating startup:", error);
       toast({
@@ -121,20 +172,25 @@ export function CreateStartupForm() {
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="logoUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Logo URL (Optional)</FormLabel>
-                  <FormControl>
-                    <Input type="url" placeholder="https://example.com/logo.png" {...field} />
-                  </FormControl>
-                  <FormDescription>Must be a valid URL (e.g., https://placehold.co/100x100.png)</FormDescription>
-                  <FormMessage />
-                </FormItem>
+            <FormItem>
+              <FormLabel className="flex items-center gap-2">
+                <FileUp className="h-4 w-4 text-muted-foreground" /> Startup Logo (Optional)
+              </FormLabel>
+              <FormControl>
+                <Input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleLogoFileChange} 
+                  ref={logoInputRef}
+                  className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                />
+              </FormControl>
+              {selectedLogoFile && (
+                <FormDescription className="text-xs">
+                  Selected: {selectedLogoFile.name} ({(selectedLogoFile.size / 1024).toFixed(2)} KB)
+                </FormDescription>
               )}
-            />
+            </FormItem>
 
             <FormField
               control={form.control}
@@ -153,6 +209,44 @@ export function CreateStartupForm() {
                 </FormItem>
               )}
             />
+            
+            <FormField
+              control={form.control}
+              name="websiteUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-2">
+                     <LinkIconLucide className="h-4 w-4 text-muted-foreground" /> Website URL (Optional)
+                  </FormLabel>
+                  <FormControl>
+                    <Input type="url" placeholder="https://example.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormItem>
+              <FormLabel className="flex items-center gap-2">
+                <FileUp className="h-4 w-4 text-muted-foreground" /> Startup Screenshot (Optional)
+              </FormLabel>
+              <FormControl>
+                <Input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleScreenshotFileChange} 
+                  ref={screenshotInputRef}
+                  className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                />
+              </FormControl>
+              {selectedScreenshotFile && (
+                <FormDescription className="text-xs">
+                  Selected: {selectedScreenshotFile.name} ({(selectedScreenshotFile.size / 1024).toFixed(2)} KB)
+                </FormDescription>
+              )}
+              <FormDescription>Upload one key screenshot of your product.</FormDescription>
+            </FormItem>
+
 
             <FormField
               control={form.control}

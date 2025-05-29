@@ -33,12 +33,12 @@ export interface Post {
   id: string;
   authorId: string;
   authorDisplayName?: string;
-  authorAvatarUrl?: string | null; // Ensure null is allowed
+  authorAvatarUrl?: string | null; 
   text: string;
-  imageUrl?: string | null; // Allow null
+  imageUrl?: string | null; 
   hashtags?: string[];
   codeSnippet?: { language: string; code: string };
-  createdAt: Timestamp; // Firestore Timestamp
+  createdAt: Timestamp; 
   likeCount: number;
   commentCount: number;
 }
@@ -50,7 +50,7 @@ export interface Comment {
   authorDisplayName?: string | null;
   authorAvatarUrl?: string | null;
   text: string;
-  createdAt: Timestamp; // Firestore Timestamp
+  createdAt: Timestamp; 
 }
 
 export interface CommunityRoom {
@@ -62,9 +62,8 @@ export interface CommunityRoom {
   creatorDisplayName?: string | null;
   creatorAvatarUrl?: string | null;
   memberCount: number;
-  createdAt: Timestamp | FieldValue; // FieldValue for serverTimestamp on create
+  createdAt: Timestamp | FieldValue; 
   pinnedMessageId?: string;
-  // Messages will be in Realtime Database
 }
 
 export interface Startup {
@@ -75,37 +74,37 @@ export interface Startup {
   description: string;
   techStack?: string[];
   creatorId: string;
-  coFounderIds: string[]; // Array of user IDs, creator is first
+  coFounderIds: string[]; 
   followerCount: number;
-  createdAt: Timestamp | FieldValue; // FieldValue for serverTimestamp on create
+  createdAt: Timestamp | FieldValue; 
   tags?: string[];
+  websiteUrl?: string | null; // New field for website URL
+  screenshotUrls?: string[] | null; // New field for screenshot URLs
 }
 
-// This type can be used when you have fetched both Firebase Auth user and their Firestore profile
 export type AppUser = FirebaseUser & UserProfile;
 
-// For Realtime Database messages
 export interface DirectMessage {
-  id: string; // messageId
+  id: string; 
   senderId: string;
   text: string;
-  timestamp: number; // RTDB typically uses Unix ms timestamp
+  timestamp: number; 
   readBy?: { [userId: string]: boolean };
 }
 
-export type NotificationType = 'follow' | 'dm' | 'like' | 'comment'; // Add more as needed
+export type NotificationType = 'follow' | 'dm' | 'like' | 'comment'; 
 
 export interface Notification {
   id: string;
-  recipientId: string; // The user who receives the notification
+  recipientId: string; 
   type: NotificationType;
   fromUserId: string;
   fromUserDisplayName: string | null;
   fromUserAvatarUrl?: string | null;
-  postId?: string; // For like, comment
-  chatId?: string; // For DM
-  messageSnippet?: string; // For DM
+  postId?: string; 
+  chatId?: string; 
+  messageSnippet?: string; 
   timestamp: Timestamp;
   read: boolean;
-  link: string; // URL to navigate to (e.g., profile, post, chat)
+  link: string; 
 }
