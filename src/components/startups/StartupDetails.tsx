@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import type { Startup, Review as ReviewType } from "@/types";
-import { Users, Tag, Layers, CalendarDays, MessageSquare, UserPlus, Heart, ExternalLink as ExternalLinkIcon, Star, Send, ThumbsUp, Loader2 } from "lucide-react";
+import { Users, Tag, Layers, CalendarDays, MessageSquare, UserPlus, Heart, ExternalLink as ExternalLinkIcon, Star, Send, ThumbsUp, Loader2, Edit3 } from "lucide-react";
 import { format } from "date-fns";
 import type { Timestamp } from "firebase/firestore";
 import Link from "next/link";
@@ -38,6 +38,8 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
   const [isJoinRequestLoading, setIsJoinRequestLoading] = useState(false);
   const [isFollowingStartup, setIsFollowingStartup] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
+
+  const isCreator = currentUser?.uid === startup.creatorId;
 
 
   const createdAtDate = (startup.createdAt as Timestamp)?.toDate ? (startup.createdAt as Timestamp).toDate() : new Date();
@@ -201,7 +203,6 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
             setIsFollowingStartup(true);
             setStartup(prev => ({ ...prev, followerCount: (prev.followerCount || 0) + 1 }));
             toast({ title: `Following ${startup.name}` });
-            // TODO: Notification for startup creator about new follower? (Optional)
         }
     } catch (error) {
         console.error("Error toggling follow startup:", error);
@@ -271,6 +272,13 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
                 </p>
               )}
             </div>
+            {isCreator && (
+                <Button asChild variant="outline">
+                    <Link href={`/startups/${startup.id}/edit`}>
+                        <Edit3 className="mr-2 h-4 w-4" /> Edit Startup
+                    </Link>
+                </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
@@ -329,7 +337,9 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
                     // In a real app, you'd fetch and display co-founder names/avatars
                     <Link key={founderId} href={`/profile/${founderId}`}>
                         <Badge variant="secondary" className="hover:bg-primary/10 cursor-pointer">
-                            Co-founder <ExternalLinkIcon className="ml-1 h-3 w-3" />
+                            {/* TODO: Fetch and display founder name if possible */}
+                            Founder: {founderId.substring(0,6)}... 
+                            <ExternalLinkIcon className="ml-1 h-3 w-3" />
                         </Badge>
                     </Link>
                 ))}
@@ -342,31 +352,35 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
                 size="lg" 
                 className="flex-1 min-w-[150px]" 
                 onClick={handleFollowStartupToggle} 
-                disabled={!currentUser || isFollowLoading}
+                disabled={!currentUser || isFollowLoading || isCreator}
                 variant={isFollowingStartup ? "outline" : "default"}
             >
                 {isFollowLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Heart className="mr-2 h-5 w-5" />} 
                 {isFollowingStartup ? "Unfollow" : "Follow"} ({startup.followerCount || 0})
             </Button>
-            <Button 
-                size="lg" 
-                variant="outline" 
-                className="flex-1 min-w-[150px]" 
-                onClick={handleJoinTeamRequest} 
-                disabled={!currentUser || hasRequestedToJoin || isJoinRequestLoading || currentUser?.uid === startup.creatorId}
-            >
-                {isJoinRequestLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <UserPlus className="mr-2 h-5 w-5" />} 
-                {hasRequestedToJoin ? "Request Sent" : "Join Team"}
-            </Button>
-            <Button 
-                size="lg" 
-                variant="outline" 
-                className="flex-1 min-w-[150px]" 
-                onClick={handleContactTeam}
-                disabled={!currentUser || currentUser?.uid === startup.creatorId}
-            > 
-                <MessageSquare className="mr-2 h-5 w-5" /> Contact Team
-            </Button>
+            {!isCreator && (
+                <>
+                <Button 
+                    size="lg" 
+                    variant="outline" 
+                    className="flex-1 min-w-[150px]" 
+                    onClick={handleJoinTeamRequest} 
+                    disabled={!currentUser || hasRequestedToJoin || isJoinRequestLoading || startup.coFounderIds.includes(currentUser?.uid || '')}
+                >
+                    {isJoinRequestLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <UserPlus className="mr-2 h-5 w-5" />} 
+                    {hasRequestedToJoin ? "Request Sent" : startup.coFounderIds.includes(currentUser?.uid || '') ? "Already a Member" : "Join Team"}
+                </Button>
+                <Button 
+                    size="lg" 
+                    variant="outline" 
+                    className="flex-1 min-w-[150px]" 
+                    onClick={handleContactTeam}
+                    disabled={!currentUser}
+                > 
+                    <MessageSquare className="mr-2 h-5 w-5" /> Contact Team
+                </Button>
+                </>
+            )}
         </CardFooter>
       </Card>
 
@@ -375,7 +389,7 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
           <CardTitle>Reviews for {startup.name}</CardTitle>
         </CardHeader>
         <CardContent>
-          {currentUser && currentUser.uid !== startup.creatorId && (
+          {currentUser && !isCreator && (
             <form onSubmit={handleReviewSubmit} className="mb-6 p-4 border rounded-lg shadow-sm space-y-3">
               <h4 className="text-md font-semibold">Leave a Review</h4>
               <div>
@@ -420,3 +434,4 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
     </div>
   );
 }
+
