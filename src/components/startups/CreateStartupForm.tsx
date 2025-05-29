@@ -21,13 +21,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/providers/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
 import { TagInput } from "@/components/shared/TagInput";
-import { useState, useRef } from "react";
-import { Rocket, Loader2, FileUp, Link as LinkIconLucide } from "lucide-react";
+import { useState, useRef, useCallback, DragEvent } from "react";
+import { Rocket, Loader2, FileUp, Link as LinkIconLucide, UploadCloud, FileImage, XCircle } from "lucide-react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import type { Startup } from "@/types";
 import { uploadImagePlaceholder } from "@/lib/imageUploader";
+import Image from "next/image";
 
 const startupStatus = ["idea", "developing", "launched", "scaling", "acquired"] as const;
 
@@ -47,10 +48,14 @@ export function CreateStartupForm() {
   const { toast } = useToast();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  
   const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const [selectedScreenshotFile, setSelectedScreenshotFile] = useState<File | null>(null);
+
+  const [selectedScreenshotFiles, setSelectedScreenshotFiles] = useState<File[]>([]);
   const screenshotInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   const form = useForm<StartupFormValues>({
     resolver: zodResolver(startupFormSchema),
@@ -68,19 +73,51 @@ export function CreateStartupForm() {
 
   const handleLogoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
-      setSelectedLogoFile(event.target.files[0]);
+      const file = event.target.files[0];
+      setSelectedLogoFile(file);
+      setLogoPreview(URL.createObjectURL(file));
     } else {
       setSelectedLogoFile(null);
+      setLogoPreview(null);
     }
   };
 
-  const handleScreenshotFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      setSelectedScreenshotFile(event.target.files[0]);
-    } else {
-      setSelectedScreenshotFile(null);
+  const handleScreenshotFiles = (files: FileList | null) => {
+    if (files) {
+      const newFiles = Array.from(files);
+      // Basic validation (e.g., file type, size limit) could be added here
+      const imageFiles = newFiles.filter(file => file.type.startsWith('image/'));
+      if (imageFiles.length !== newFiles.length) {
+        toast({ title: "Invalid File Type", description: "Only image files are allowed for screenshots.", variant: "destructive"});
+      }
+      setSelectedScreenshotFiles(prevFiles => [...prevFiles, ...imageFiles].slice(0, 5)); // Limit to 5 screenshots for now
     }
   };
+
+  const handleScreenshotInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    handleScreenshotFiles(event.target.files);
+     if (event.target) event.target.value = ""; // Reset input to allow re-selection of the same file
+  };
+
+  const removeScreenshotFile = (index: number) => {
+    setSelectedScreenshotFiles(prevFiles => prevFiles.filter((_, i) => i !== index));
+  };
+
+  const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDraggingOver(true);
+  }, []);
+
+  const onDragLeave = useCallback(() => {
+    setIsDraggingOver(false);
+  }, []);
+
+  const onDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDraggingOver(false);
+    handleScreenshotFiles(event.dataTransfer.files);
+  }, []);
+
 
   async function onSubmit(data: StartupFormValues) {
     if (!user) {
@@ -101,16 +138,19 @@ export function CreateStartupForm() {
       }
     }
 
-    let screenshotUrls: string[] = [];
-    if (selectedScreenshotFile) {
-      try {
-        const screenshotUrl = await uploadImagePlaceholder(selectedScreenshotFile);
-        screenshotUrls.push(screenshotUrl);
-      } catch (error: any) {
-        console.error("Screenshot upload error:", error);
-        toast({ title: "Screenshot Upload Failed", description: error?.message || "Could not process the screenshot.", variant: "destructive" });
-        setIsLoading(false);
-        return;
+    const uploadedScreenshotUrls: string[] = [];
+    if (selectedScreenshotFiles.length > 0) {
+      for (const file of selectedScreenshotFiles) {
+        try {
+          const url = await uploadImagePlaceholder(file);
+          uploadedScreenshotUrls.push(url);
+        } catch (error: any) {
+          console.error(`Screenshot upload error for ${file.name}:`, error);
+          toast({ title: "Screenshot Upload Failed", description: `Could not upload ${file.name}. ${error?.message || ""}`, variant: "destructive" });
+          // Decide if to stop or continue. For now, stop on first error.
+          setIsLoading(false);
+          return; 
+        }
       }
     }
     
@@ -122,7 +162,7 @@ export function CreateStartupForm() {
       techStack: data.techStack || [],
       tags: data.tags || [],
       websiteUrl: data.websiteUrl || null,
-      screenshotUrls: screenshotUrls.length > 0 ? screenshotUrls : null,
+      screenshotUrls: uploadedScreenshotUrls.length > 0 ? uploadedScreenshotUrls : null,
       creatorId: user.uid,
       coFounderIds: [user.uid], 
       followerCount: 0,
@@ -134,8 +174,9 @@ export function CreateStartupForm() {
       toast({ title: "Startup created!", description: `${data.name} is now showcased.` });
       form.reset();
       setSelectedLogoFile(null);
+      setLogoPreview(null);
       if (logoInputRef.current) logoInputRef.current.value = "";
-      setSelectedScreenshotFile(null);
+      setSelectedScreenshotFiles([]);
       if (screenshotInputRef.current) screenshotInputRef.current.value = "";
       router.push(`/startups/${docRef.id}`);
     } catch (error: any) {
@@ -157,7 +198,7 @@ export function CreateStartupForm() {
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             <FormField
               control={form.control}
               name="name"
@@ -176,6 +217,11 @@ export function CreateStartupForm() {
               <FormLabel className="flex items-center gap-2">
                 <FileUp className="h-4 w-4 text-muted-foreground" /> Startup Logo (Optional)
               </FormLabel>
+              {logoPreview && (
+                <div className="my-2 relative w-24 h-24">
+                  <Image src={logoPreview} alt="Logo preview" layout="fill" objectFit="contain" className="rounded border" data-ai-hint="company logo preview"/>
+                </div>
+              )}
               <FormControl>
                 <Input 
                   type="file" 
@@ -219,7 +265,7 @@ export function CreateStartupForm() {
                      <LinkIconLucide className="h-4 w-4 text-muted-foreground" /> Website URL (Optional)
                   </FormLabel>
                   <FormControl>
-                    <Input type="url" placeholder="https://example.com" {...field} />
+                    <Input type="url" placeholder="https://example.com" {...field} value={field.value || ''} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -228,25 +274,58 @@ export function CreateStartupForm() {
 
             <FormItem>
               <FormLabel className="flex items-center gap-2">
-                <FileUp className="h-4 w-4 text-muted-foreground" /> Startup Screenshot (Optional)
+                <UploadCloud className="h-5 w-5 text-muted-foreground" /> Startup Screenshots (Optional, up to 5)
               </FormLabel>
-              <FormControl>
-                <Input 
-                  type="file" 
-                  accept="image/*" 
-                  onChange={handleScreenshotFileChange} 
-                  ref={screenshotInputRef}
-                  className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                />
-              </FormControl>
-              {selectedScreenshotFile && (
-                <FormDescription className="text-xs">
-                  Selected: {selectedScreenshotFile.name} ({(selectedScreenshotFile.size / 1024).toFixed(2)} KB)
-                </FormDescription>
+              <div 
+                className={`mt-1 flex justify-center rounded-md border-2 border-dashed px-6 pt-5 pb-6 transition-colors
+                  ${isDraggingOver ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50'}`}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                onClick={() => screenshotInputRef.current?.click()}
+              >
+                <div className="space-y-1 text-center">
+                  <FileImage className="mx-auto h-12 w-12 text-muted-foreground" />
+                  <div className="flex text-sm text-muted-foreground">
+                    <span className="relative cursor-pointer rounded-md bg-background font-medium text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:text-primary/80">
+                      Upload files
+                    </span>
+                    <input ref={screenshotInputRef} id="screenshot-upload" name="screenshot-upload" type="file" className="sr-only" multiple accept="image/*" onChange={handleScreenshotInputChange} />
+                    <p className="pl-1">or drag and drop</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 10MB each</p>
+                </div>
+              </div>
+              {selectedScreenshotFiles.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Selected screenshots:</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                    {selectedScreenshotFiles.map((file, index) => (
+                      <div key={index} className="relative group aspect-square">
+                        <Image
+                          src={URL.createObjectURL(file)}
+                          alt={`Screenshot preview ${index + 1}`}
+                          layout="fill"
+                          objectFit="cover"
+                          className="rounded-md border"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-1 right-1 h-6 w-6 opacity-70 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => { e.stopPropagation(); removeScreenshotFile(index);}}
+                        >
+                          <XCircle className="h-4 w-4" />
+                          <span className="sr-only">Remove screenshot</span>
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
-              <FormDescription>Upload one key screenshot of your product.</FormDescription>
+              <FormDescription>Showcase your product with a few screenshots.</FormDescription>
             </FormItem>
-
 
             <FormField
               control={form.control}
@@ -320,3 +399,5 @@ export function CreateStartupForm() {
     </Card>
   );
 }
+
+    

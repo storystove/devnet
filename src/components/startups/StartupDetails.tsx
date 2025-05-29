@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import type { Startup, Review as ReviewType } from "@/types";
-import { Users, Tag, Layers, CalendarDays, MessageSquare, UserPlus, Heart, ExternalLink as ExternalLinkIcon, Star, Send, ThumbsUp, Loader2, Edit3 } from "lucide-react";
+import { Users, Tag, Layers, CalendarDays, MessageSquare, UserPlus, Heart, ExternalLink as ExternalLinkIcon, Star, Send, ThumbsUp, Loader2, Edit3, Image as ImageIcon } from "lucide-react";
 import { format } from "date-fns";
 import type { Timestamp } from "firebase/firestore";
 import Link from "next/link";
@@ -289,18 +289,20 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
 
           {startup.screenshotUrls && startup.screenshotUrls.length > 0 && (
             <div>
-              <h3 className="text-lg font-semibold mb-2">Screenshots</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <h3 className="text-lg font-semibold mb-3 flex items-center"><ImageIcon className="mr-2 h-5 w-5 text-primary"/>Screenshots</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 {startup.screenshotUrls.map((url, index) => (
-                  <div key={index} className="relative aspect-video w-full rounded-md overflow-hidden border">
-                    <Image
-                      src={url}
-                      alt={`${startup.name} screenshot ${index + 1}`}
-                      layout="fill"
-                      objectFit="contain"
-                      data-ai-hint="startup screenshot application interface"
-                    />
-                  </div>
+                  <a key={index} href={url} target="_blank" rel="noopener noreferrer" className="block rounded-md overflow-hidden border hover:opacity-90 transition-opacity">
+                    <div className="relative aspect-video w-full">
+                      <Image
+                        src={url}
+                        alt={`${startup.name} screenshot ${index + 1}`}
+                        layout="fill"
+                        objectFit="cover"
+                        data-ai-hint="startup screenshot application interface"
+                      />
+                    </div>
+                  </a>
                 ))}
               </div>
             </div>
@@ -390,21 +392,23 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
         </CardHeader>
         <CardContent>
           {currentUser && !isCreator && (
-            <form onSubmit={handleReviewSubmit} className="mb-6 p-4 border rounded-lg shadow-sm space-y-3">
+            <form onSubmit={handleReviewSubmit} className="mb-6 p-4 border rounded-lg shadow-sm space-y-3 bg-muted/30">
               <h4 className="text-md font-semibold">Leave a Review</h4>
               <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-1">Rating</label>
+                <label className="block text-sm font-medium text-muted-foreground mb-1">Your Rating</label>
                 <div className="flex space-x-1">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <Button
                       key={star}
                       type="button"
-                      variant={newReviewRating >= star ? "default" : "outline"}
+                      variant={newReviewRating >= star ? "default" : "ghost"}
                       size="icon"
                       onClick={() => setNewReviewRating(star)}
-                      className={`p-1 h-8 w-8 ${newReviewRating >= star ? 'text-amber-400 border-amber-400' : 'text-muted-foreground'}`}
+                      className={`p-1 h-8 w-8 border 
+                        ${newReviewRating >= star ? 'text-amber-400 border-amber-400 bg-amber-400/10 hover:bg-amber-400/20' 
+                                                  : 'text-muted-foreground hover:border-amber-300 hover:text-amber-400'}`}
                     >
-                      <Star className={`h-5 w-5 ${newReviewRating >= star ? 'fill-amber-400' : ''}`} />
+                      <Star className={`h-5 w-5 ${newReviewRating >= star ? 'fill-amber-400' : 'fill-transparent'}`} />
                     </Button>
                   ))}
                 </div>
@@ -413,7 +417,7 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
                 placeholder="Share your experience with this startup..."
                 value={newReviewText}
                 onChange={(e) => setNewReviewText(e.target.value)}
-                className="min-h-[80px]"
+                className="min-h-[80px] bg-background"
                 disabled={isSubmittingReview}
               />
               <Button type="submit" disabled={isSubmittingReview || newReviewRating === 0 || !newReviewText.trim()}>
@@ -435,3 +439,4 @@ export function StartupDetails({ startup: initialStartup }: StartupDetailsProps)
   );
 }
 
+    
