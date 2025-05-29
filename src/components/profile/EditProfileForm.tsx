@@ -21,16 +21,18 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
 import { TagInput } from "@/components/shared/TagInput";
 import { useState, useEffect, useRef } from "react";
-import { Loader2, Save, FileUp } from "lucide-react";
+import { Loader2, Save, FileUp, Palette } from "lucide-react"; // Added Palette
 import type { UserProfile } from "@/types";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { updateProfile as updateAuthProfile } from "firebase/auth";
-import { uploadImagePlaceholder } from "@/lib/imageUploader"; // Import the placeholder
+import { uploadImagePlaceholder } from "@/lib/imageUploader";
+import { Separator } from "@/components/ui/separator"; // Added Separator
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Added RadioGroup
+import { useTheme } from "@/providers/ThemeProvider"; // Added useTheme
 
 const profileFormSchema = z.object({
   displayName: z.string().min(2, "Display name must be at least 2 characters.").max(50),
-  // avatarUrl is now optional in schema, will be populated by upload
   bio: z.string().max(500, "Bio cannot exceed 500 characters.").optional().or(z.literal("")),
   skills: z.array(z.string()).optional(),
   preferredLanguages: z.array(z.string()).optional(),
@@ -56,6 +58,7 @@ const formatExternalLinks = (links: UserProfile["externalLinks"] | undefined): s
 export function EditProfileForm() {
   const { user: firebaseAuthUser, loading: authLoading } = useAuth();
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme(); // Added theme state
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingProfile, setIsFetchingProfile] = useState(true);
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
@@ -106,7 +109,6 @@ export function EditProfileForm() {
   const handleAvatarFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       setSelectedAvatarFile(event.target.files[0]);
-      // Optionally, show a preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setCurrentAvatarUrl(reader.result as string);
@@ -114,7 +116,6 @@ export function EditProfileForm() {
       reader.readAsDataURL(event.target.files[0]);
     } else {
       setSelectedAvatarFile(null);
-      // Revert to original avatar if file is deselected
       setCurrentAvatarUrl(firebaseAuthUser?.photoURL || (form.getValues() as any).avatarUrl);
     }
   };
@@ -126,16 +127,16 @@ export function EditProfileForm() {
     }
     setIsLoading(true);
     
-    let newAvatarUrl: string | null | undefined = currentAvatarUrl; // Keep current if no new file
+    let newAvatarUrl: string | null | undefined = currentAvatarUrl;
 
     if (selectedAvatarFile) {
       try {
         newAvatarUrl = await uploadImagePlaceholder(selectedAvatarFile);
-      } catch (error) {
-        console.error("Placeholder avatar upload error:", error);
+      } catch (error: any) {
+        console.error("Avatar upload error:", error);
         toast({
-          title: "Avatar Upload Failed (Placeholder)",
-          description: "Could not get placeholder URL for the avatar.",
+          title: "Avatar Upload Failed",
+          description: getErrorMessage(error, "Could not upload the avatar."),
           variant: "destructive",
         });
         setIsLoading(false);
@@ -166,15 +167,21 @@ export function EditProfileForm() {
       await updateDoc(userRef, profileUpdateData);
       
       toast({ title: "Profile updated!", description: "Your changes have been saved." });
-      setSelectedAvatarFile(null); // Reset selected file
+      setSelectedAvatarFile(null); 
       if(avatarInputRef.current) avatarInputRef.current.value = "";
-      // No need to call form.reset if we want to keep other fields populated
     } catch (error: any) {
         console.error("Error updating profile:", error);
         toast({ title: "Update Failed", description: error.message || "Could not save profile.", variant: "destructive"})
     } finally {
         setIsLoading(false);
     }
+  }
+
+  function getErrorMessage(error: any, defaultMessage: string): string {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    if (error && typeof error.message === 'string') return error.message;
+    return defaultMessage;
   }
 
   if (authLoading || isFetchingProfile) {
@@ -193,104 +200,150 @@ export function EditProfileForm() {
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <FormField
-              control={form.control}
-              name="displayName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Display Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Your Name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            <FormItem>
-              <FormLabel className="flex items-center gap-2">
-                <FileUp className="h-4 w-4 text-muted-foreground" /> Avatar (Optional)
-              </FormLabel>
-              <div className="flex items-center gap-4">
-                {currentAvatarUrl && (
-                  <img src={currentAvatarUrl} alt="Avatar preview" className="h-20 w-20 rounded-full object-cover border" data-ai-hint="profile avatar current"/>
-                )}
-                 {!currentAvatarUrl && (
-                  <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center text-muted-foreground text-2xl border">
-                    {form.getValues().displayName?.charAt(0).toUpperCase() || '?'}
-                  </div>
-                )}
-                <FormControl>
-                  <Input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={handleAvatarFileChange}
-                    ref={avatarInputRef}
-                    className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                  />
-                </FormControl>
-              </div>
-               {selectedAvatarFile && (
-                <FormDescription className="text-xs mt-1">
-                  New: {selectedAvatarFile.name} ({(selectedAvatarFile.size / 1024).toFixed(2)} KB)
-                </FormDescription>
-              )}
-            </FormItem>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <div>
+                <h3 className="text-lg font-medium mb-4">Account Information</h3>
+                <div className="space-y-6">
+                    <FormField
+                    control={form.control}
+                    name="displayName"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Display Name</FormLabel>
+                        <FormControl>
+                            <Input placeholder="Your Name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                    
+                    <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                        <FileUp className="h-4 w-4 text-muted-foreground" /> Avatar (Optional)
+                    </FormLabel>
+                    <div className="flex items-center gap-4">
+                        {currentAvatarUrl && (
+                        <img src={currentAvatarUrl} alt="Avatar preview" className="h-20 w-20 rounded-full object-cover border" data-ai-hint="profile avatar current"/>
+                        )}
+                        {!currentAvatarUrl && (
+                        <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center text-muted-foreground text-2xl border">
+                            {form.getValues().displayName?.charAt(0).toUpperCase() || '?'}
+                        </div>
+                        )}
+                        <FormControl>
+                        <Input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={handleAvatarFileChange}
+                            ref={avatarInputRef}
+                            className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                        />
+                        </FormControl>
+                    </div>
+                    {selectedAvatarFile && (
+                        <FormDescription className="text-xs mt-1">
+                        New: {selectedAvatarFile.name} ({(selectedAvatarFile.size / 1024).toFixed(2)} KB)
+                        </FormDescription>
+                    )}
+                    </FormItem>
 
-            <FormField
-              control={form.control}
-              name="bio"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Bio (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Tell us a bit about yourself..." className="min-h-[100px]" {...field} value={field.value || ''} />
-                  </FormControl>
-                  <FormMessage />
+                    <FormField
+                    control={form.control}
+                    name="bio"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Bio (Optional)</FormLabel>
+                        <FormControl>
+                            <Textarea placeholder="Tell us a bit about yourself..." className="min-h-[100px]" {...field} value={field.value || ''} />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                    <FormField
+                    control={form.control}
+                    name="skills"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Skills (Optional)</FormLabel>
+                        <FormControl>
+                            <TagInput value={field.value || []} onChange={field.onChange} placeholder="Add skills (e.g., React, Python)" />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                    <FormField
+                    control={form.control}
+                    name="preferredLanguages"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Preferred Languages (Optional)</FormLabel>
+                        <FormControl>
+                            <TagInput value={field.value || []} onChange={field.onChange} placeholder="Add languages (e.g., English, Spanish)" />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                    <FormField
+                    control={form.control}
+                    name="externalLinksText"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>External Links (Optional)</FormLabel>
+                        <FormControl>
+                            <Textarea placeholder="GitHub - https://github.com/username&#10;LinkedIn - https://linkedin.com/in/profile" className="min-h-[80px]" {...field} value={field.value || ''}/>
+                        </FormControl>
+                        <FormDescription>Enter one link per line in the format: Name - URL</FormDescription>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                </div>
+            </div>
+
+            <Separator />
+
+            <div>
+                <h3 className="text-lg font-medium mb-4 flex items-center">
+                    <Palette className="mr-2 h-5 w-5" /> Appearance
+                </h3>
+                <FormItem className="space-y-3">
+                    <FormLabel>Theme</FormLabel>
+                    <FormControl>
+                        <RadioGroup
+                        onValueChange={(value: string) => setTheme(value as "light" | "dark" | "system")}
+                        defaultValue={theme}
+                        className="flex flex-col space-y-1 sm:flex-row sm:space-y-0 sm:space-x-4"
+                        >
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                            <FormControl>
+                            <RadioGroupItem value="light" />
+                            </FormControl>
+                            <FormLabel className="font-normal">Light</FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                            <FormControl>
+                            <RadioGroupItem value="dark" />
+                            </FormControl>
+                            <FormLabel className="font-normal">Dark</FormLabel>
+                        </FormItem>
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                            <FormControl>
+                            <RadioGroupItem value="system" />
+                            </FormControl>
+                            <FormLabel className="font-normal">System</FormLabel>
+                        </FormItem>
+                        </RadioGroup>
+                    </FormControl>
+                    <FormDescription>Select your preferred theme for the application.</FormDescription>
                 </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="skills"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Skills (Optional)</FormLabel>
-                  <FormControl>
-                    <TagInput value={field.value || []} onChange={field.onChange} placeholder="Add skills (e.g., React, Python)" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="preferredLanguages"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Preferred Languages (Optional)</FormLabel>
-                  <FormControl>
-                    <TagInput value={field.value || []} onChange={field.onChange} placeholder="Add languages (e.g., English, Spanish)" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="externalLinksText"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>External Links (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="GitHub - https://github.com/username&#10;LinkedIn - https://linkedin.com/in/profile" className="min-h-[80px]" {...field} value={field.value || ''}/>
-                  </FormControl>
-                  <FormDescription>Enter one link per line in the format: Name - URL</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            </div>
+            
+            <Separator />
+
             <Button type="submit" className="w-full sm:w-auto" disabled={isLoading || isFetchingProfile}>
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Changes
@@ -301,3 +354,4 @@ export function EditProfileForm() {
     </Card>
   );
 }
+
