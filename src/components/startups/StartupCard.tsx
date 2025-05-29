@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Startup } from "@/types";
-import { Users, Eye, ArrowRight } from "lucide-react";
+import { Users, Eye, ArrowRight, Star } from "lucide-react";
 import { formatDistanceToNow } from 'date-fns';
 import type { Timestamp } from "firebase/firestore";
 
@@ -16,10 +16,9 @@ interface StartupCardProps {
 }
 
 export function StartupCard({ startup }: StartupCardProps) {
-  // Convert Firestore Timestamp to JavaScript Date if startup.createdAt exists and has a toDate method
   const createdAtDate = startup.createdAt && (startup.createdAt as Timestamp).toDate
     ? (startup.createdAt as Timestamp).toDate()
-    : new Date(); // Fallback, though createdAt should ideally always be a Timestamp from Firestore
+    : new Date();
 
   const timeAgo = startup.createdAt ? formatDistanceToNow(createdAtDate, { addSuffix: true }) : '';
   
@@ -34,7 +33,7 @@ export function StartupCard({ startup }: StartupCardProps) {
                 alt={`${startup.name} logo`}
                 width={48}
                 height={48}
-                className="rounded-md border"
+                className="rounded-md border object-contain"
                 data-ai-hint="company logo"
               />
             ) : (
@@ -46,7 +45,15 @@ export function StartupCard({ startup }: StartupCardProps) {
               <CardTitle className="text-lg hover:text-primary">
                 <Link href={`/startups/${startup.id}`}>{startup.name}</Link>
               </CardTitle>
-              <Badge variant="outline" className="capitalize mt-1 text-xs">{startup.status}</Badge>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="outline" className="capitalize text-xs">{startup.status}</Badge>
+                {startup.averageRating && startup.reviewCount && startup.reviewCount > 0 ? (
+                    <div className="flex items-center text-xs text-amber-500">
+                        <Star className="h-3.5 w-3.5 mr-0.5 fill-amber-500" />
+                        {startup.averageRating.toFixed(1)} ({startup.reviewCount})
+                    </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
