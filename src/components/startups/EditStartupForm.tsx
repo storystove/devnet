@@ -69,8 +69,8 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
       name: startup.name || "",
       description: startup.description || "",
       status: startup.status || "idea",
-      techStack: startup.techStack || [],
-      tags: startup.tags || [],
+      techStack: startup.techStack || [], // Explicitly an array
+      tags: startup.tags || [],          // Explicitly an array
       websiteUrl: startup.websiteUrl || "",
     },
   });
@@ -90,7 +90,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
   }, [startup, form]);
 
 
-  // const descriptionContent = form.watch("description"); // Temporarily remove for testing
+  // const descriptionContent = form.watch("description"); // Keep AI suggestions off for now
 
   const handleLogoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -99,13 +99,13 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
       setLogoPreview(URL.createObjectURL(file));
     } else {
       setSelectedLogoFile(null); 
-      setLogoPreview(startup.logoUrl || null);
+      setLogoPreview(startup.logoUrl || null); // Revert to original if selection is cleared
     }
   };
   
   const removeLogo = () => {
     setSelectedLogoFile(null);
-    setLogoPreview(null); 
+    setLogoPreview(null); // Indicates logo should be removed on save
     if (logoInputRef.current) logoInputRef.current.value = "";
   };
 
@@ -153,9 +153,12 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
     event.preventDefault();
     setIsDraggingOverScreenshots(false);
     handleNewScreenshotFiles(event.dataTransfer.files);
-  }, []);
+  }, [handleNewScreenshotFiles]);
 
   async function onSubmit(data: StartupFormValues) {
+    // CRITICAL: Log the data received from react-hook-form
+    console.log('EditStartupForm - Form Data Submitted:', JSON.stringify(data, null, 2));
+
     if (!user || user.uid !== startup.creatorId) {
       toast({ title: "Unauthorized", description: "You are not allowed to edit this startup.", variant: "destructive" });
       return;
@@ -166,8 +169,8 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
     }
     setIsLoading(true);
 
-    let finalLogoUrl: string | null = startup.logoUrl; 
-    if (selectedLogoFile) {
+    let finalLogoUrl: string | null = logoPreview; // Start with current preview (could be existing or new object URL)
+    if (selectedLogoFile) { // If a new file was selected, upload it
       try {
         finalLogoUrl = await uploadImagePlaceholder(selectedLogoFile);
       } catch (error: any) {
@@ -176,8 +179,10 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
         return;
       }
     } else if (logoPreview === null && startup.logoUrl !== null) { 
+        // This means the user explicitly removed the existing logo (logoPreview is null, but original startup.logoUrl wasn't)
         finalLogoUrl = null;
     }
+    // If no new file and logoPreview still holds existing URL, finalLogoUrl is already correct.
 
 
     const uploadedNewScreenshotUrls: string[] = [];
@@ -194,10 +199,12 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
       }
     }
     
+    // Combine retained existing URLs and newly uploaded ones
     const finalScreenshotUrls = [...existingScreenshotUrls, ...uploadedNewScreenshotUrls].slice(0, MAX_SCREENSHOTS); 
     
-    const techStackToSave = Array.isArray(data.techStack) ? data.techStack : [];
-    const tagsToSave = Array.isArray(data.tags) ? data.tags : [];
+    // Ensure techStack and tags are arrays
+    const techStackToSave = data.techStack || [];
+    const tagsToSave = data.tags || [];
 
     const startupUpdateData: Partial<Startup> & { updatedAt: any } = {
       name: data.name,
@@ -212,6 +219,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
     };
 
     try {
+      console.log('EditStartupForm - Data to save to Firestore:', JSON.stringify(startupUpdateData, null, 2));
       const startupRef = doc(db, "startups", startup.id);
       await updateDoc(startupRef, startupUpdateData);
       toast({ title: "Startup updated!", description: `${data.name} has been successfully updated.` });
@@ -348,7 +356,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
                 </div>
               )}
 
-              {existingScreenshotUrls.length < MAX_SCREENSHOTS && (
+              {(existingScreenshotUrls.length + newScreenshotFiles.length) < MAX_SCREENSHOTS && (
                 <>
                   <FormLabel className="text-sm font-normal text-muted-foreground mt-4 block">Add new screenshots:</FormLabel>
                   <div 
@@ -368,7 +376,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
                         <input ref={screenshotInputRef} id="new-screenshot-upload" name="new-screenshot-upload" type="file" className="sr-only" multiple accept="image/*" onChange={handleScreenshotInputChange} />
                         <p className="pl-1">or drag and drop</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 10MB each. Up to {MAX_SCREENSHOTS - existingScreenshotUrls.length} more.</p>
+                      <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 10MB each. Up to {MAX_SCREENSHOTS - (existingScreenshotUrls.length + newScreenshotFiles.length)} more.</p>
                     </div>
                   </div>
                 </>
@@ -401,7 +409,7 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
                   </div>
                 </div>
               )}
-              <FormDescription>You can have up to {MAX_SCREENSHOTS} screenshots in total.</FormDescription>
+              <FormDescription>You can have up to {MAX_SCREENSHOTS} screenshots in total. Add each item individually by typing and pressing Enter.</FormDescription>
             </FormItem>
 
             <FormField
@@ -435,10 +443,10 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
                   <FormLabel>Tech Stack (Optional)</FormLabel>
                   <FormControl>
                      <TagInput
-                        value={field.value || []}
+                        value={field.value || []} // Ensure field.value is an array
                         onChange={field.onChange}
                         placeholder="e.g., React, Node.js, Python"
-                        // contentForSuggestions={descriptionContent} // Temporarily removed
+                        // contentForSuggestions={descriptionContent} // Keep AI suggestions off
                       />
                   </FormControl>
                   <FormDescription>List the main technologies. Add each item individually by typing and pressing Enter. Max 10.</FormDescription>
@@ -455,10 +463,10 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
                   <FormLabel>Tags (Optional)</FormLabel>
                   <FormControl>
                      <TagInput
-                        value={field.value || []}
+                        value={field.value || []} // Ensure field.value is an array
                         onChange={field.onChange}
                         placeholder="e.g., SaaS, AI, Fintech"
-                        // contentForSuggestions={descriptionContent} // Temporarily removed
+                        // contentForSuggestions={descriptionContent} // Keep AI suggestions off
                       />
                   </FormControl>
                   <FormDescription>Help people discover your startup. Add each tag individually by typing and pressing Enter. Max 10.</FormDescription>
@@ -478,6 +486,5 @@ export function EditStartupForm({ startup }: EditStartupFormProps) {
   );
 }
 
-    
 
     

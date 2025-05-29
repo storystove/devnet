@@ -64,13 +64,13 @@ export function CreateStartupForm() {
       name: "",
       description: "",
       status: "idea",
-      techStack: [],
-      tags: [],
+      techStack: [], // Explicitly an empty array
+      tags: [],      // Explicitly an empty array
       websiteUrl: "",
     },
   });
 
-  // const descriptionContent = form.watch("description"); // Temporarily remove for testing
+  // const descriptionContent = form.watch("description"); // Keep AI suggestions off for now
 
   const handleLogoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -122,10 +122,13 @@ export function CreateStartupForm() {
     event.preventDefault();
     setIsDraggingOver(false);
     handleScreenshotFiles(event.dataTransfer.files);
-  }, []);
+  }, [handleScreenshotFiles]);
 
 
   async function onSubmit(data: StartupFormValues) {
+    // CRITICAL: Log the data received from react-hook-form
+    console.log('CreateStartupForm - Form Data Submitted:', JSON.stringify(data, null, 2));
+
     if (!user) {
       toast({ title: "Please sign in to create a startup.", variant: "destructive" });
       return;
@@ -136,10 +139,10 @@ export function CreateStartupForm() {
     }
     setIsLoading(true);
 
-    let logoUrl: string | null = null;
+    let logoUrlToSave: string | null = null;
     if (selectedLogoFile) {
       try {
-        logoUrl = await uploadImagePlaceholder(selectedLogoFile);
+        logoUrlToSave = await uploadImagePlaceholder(selectedLogoFile);
       } catch (error: any) {
         console.error("Logo upload error:", error);
         toast({ title: "Logo Upload Failed", description: error?.message || "Could not process the logo.", variant: "destructive" });
@@ -148,12 +151,12 @@ export function CreateStartupForm() {
       }
     }
 
-    const uploadedScreenshotUrls: string[] = [];
+    const uploadedScreenshotUrlsToSave: string[] = [];
     if (selectedScreenshotFiles.length > 0) {
       for (const file of selectedScreenshotFiles) {
         try {
           const url = await uploadImagePlaceholder(file);
-          uploadedScreenshotUrls.push(url);
+          uploadedScreenshotUrlsToSave.push(url);
         } catch (error: any) {
           console.error(`Screenshot upload error for ${file.name}:`, error);
           toast({ title: "Screenshot Upload Failed", description: `Could not upload ${file.name}. ${error?.message || ""}`, variant: "destructive" });
@@ -163,25 +166,30 @@ export function CreateStartupForm() {
       }
     }
     
-    const techStackToSave = Array.isArray(data.techStack) ? data.techStack : [];
-    const tagsToSave = Array.isArray(data.tags) ? data.tags : [];
+    // Ensure techStack and tags are arrays, even if RHF somehow provides null/undefined
+    const techStackToSave = data.techStack || [];
+    const tagsToSave = data.tags || [];
 
     const startupData: Omit<Startup, "id" | "createdAt"> & { createdAt: any } = {
       name: data.name,
-      logoUrl: logoUrl,
+      logoUrl: logoUrlToSave,
       description: data.description,
       status: data.status,
       techStack: techStackToSave,
       tags: tagsToSave,
       websiteUrl: data.websiteUrl || null,
-      screenshotUrls: uploadedScreenshotUrls.length > 0 ? uploadedScreenshotUrls : null,
+      screenshotUrls: uploadedScreenshotUrlsToSave.length > 0 ? uploadedScreenshotUrlsToSave : null,
       creatorId: user.uid,
       coFounderIds: [user.uid], 
       followerCount: 0,
+      // reviewCount and averageRating are initialized later or when first review comes in
+      reviewCount: 0,
+      averageRating: 0,
       createdAt: serverTimestamp(),
     };
 
     try {
+      console.log('CreateStartupForm - Data to save to Firestore:', JSON.stringify(startupData, null, 2));
       const docRef = await addDoc(collection(db, "startups"), startupData);
       toast({ title: "Startup created!", description: `${data.name} is now showcased.` });
       form.reset();
@@ -336,7 +344,7 @@ export function CreateStartupForm() {
                   </div>
                 </div>
               )}
-              <FormDescription>Showcase your product with a few screenshots.</FormDescription>
+              <FormDescription>Showcase your product with a few screenshots. Add each item individually by typing and pressing Enter.</FormDescription>
             </FormItem>
 
             <FormField
@@ -370,10 +378,10 @@ export function CreateStartupForm() {
                   <FormLabel>Tech Stack (Optional)</FormLabel>
                   <FormControl>
                      <TagInput
-                        value={field.value || []}
+                        value={field.value || []} // Ensure field.value is an array
                         onChange={field.onChange}
                         placeholder="e.g., React, Node.js, Python"
-                        // contentForSuggestions={descriptionContent} // Temporarily removed
+                        // contentForSuggestions={descriptionContent} // Keep AI suggestions off
                       />
                   </FormControl>
                   <FormDescription>List the main technologies. Add each item individually by typing and pressing Enter. Max 10.</FormDescription>
@@ -390,10 +398,10 @@ export function CreateStartupForm() {
                   <FormLabel>Tags (Optional)</FormLabel>
                   <FormControl>
                      <TagInput
-                        value={field.value || []}
+                        value={field.value || []} // Ensure field.value is an array
                         onChange={field.onChange}
                         placeholder="e.g., SaaS, AI, Fintech"
-                        // contentForSuggestions={descriptionContent} // Temporarily removed
+                        // contentForSuggestions={descriptionContent} // Keep AI suggestions off
                       />
                   </FormControl>
                   <FormDescription>Help people discover your startup. Add each tag individually by typing and pressing Enter. Max 10.</FormDescription>
@@ -412,8 +420,6 @@ export function CreateStartupForm() {
     </Card>
   );
 }
-    
-
     
 
     
