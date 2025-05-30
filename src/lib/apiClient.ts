@@ -1,4 +1,3 @@
-
 // src/lib/apiClient.ts
 const API_BASE_URL = 'https://devnet-apis-auth.onrender.com';
 
@@ -8,13 +7,18 @@ interface RequestOptions extends RequestInit {
 }
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  // Set default headers unless it's form-data.
   const headers: HeadersInit = options.isFormData ? {} : { 'Content-Type': 'application/json' };
-  
+
   if (options.useAuth) {
     const token = localStorage.getItem('authToken');
     if (token) {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-    } else if (endpoint !== '/api/signin' && endpoint !== '/api/signup' && !endpoint.startsWith('/api/auth/google')) {
+    } else if (
+      endpoint !== '/api/signin' &&
+      endpoint !== '/api/signup' &&
+      !endpoint.startsWith('/api/auth/google')
+    ) {
       console.warn('Auth token not found for authenticated request to', endpoint);
     }
   }
@@ -27,6 +31,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     },
   };
 
+  // If a body is provided and it's not form-data, stringify the body.
   if (options.body && !options.isFormData) {
     config.body = JSON.stringify(options.body);
   }
@@ -35,12 +40,11 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   try {
     response = await fetch(`${API_BASE_URL}${endpoint}`, config);
   } catch (networkError: any) {
-    // This catches network errors (e.g., DNS resolution failure, server not reachable)
     console.error('API Network Error:', networkError.message, 'for endpoint:', endpoint);
     throw new Error(`Network error: Could not connect to the server. Please check your internet connection and try again. (${networkError.message})`);
   }
 
-
+  // If the response is not ok, try to extract error information.
   if (!response.ok) {
     let errorData;
     try {
@@ -52,12 +56,14 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     throw new Error(errorData?.message || `API request failed: ${response.status} ${response.statusText}`);
   }
 
-  if (response.status === 204 || response.headers.get("content-length") === "0") { // Handle No Content
-    return undefined as T; 
+  // Instead of checking content-length, read the response as text first.
+  const text = await response.text();
+  if (!text) {
+    return undefined as T;
   }
-  
+
   try {
-    return await response.json() as Promise<T>;
+    return JSON.parse(text) as T;
   } catch (jsonError: any) {
     console.error('API JSON Parsing Error:', jsonError.message, 'for endpoint:', endpoint, 'Response status:', response.status);
     throw new Error(`Failed to parse server response. (${jsonError.message})`);
