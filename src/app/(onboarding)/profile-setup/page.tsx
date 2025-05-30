@@ -17,12 +17,26 @@ export default function ProfileSetupStep1Page() {
     if (!authLoading && !user) {
       router.replace("/signin");
     }
+    // If user is loaded and profile setup is already completed, redirect to home
+    if (!authLoading && user && user.profileSetupCompleted) {
+        router.replace("/");
+    }
   }, [user, authLoading, router]);
 
   if (authLoading || !user) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
+  // Additional check in case router.replace hasn't finished before render
+  if (user.profileSetupCompleted) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p>Redirecting...</p>
+        <Loader2 className="ml-2 h-6 w-6 animate-spin text-primary" />
       </div>
     );
   }
@@ -35,7 +49,7 @@ export default function ProfileSetupStep1Page() {
         <Progress value={50} className="mt-2 h-2" />
       </CardHeader>
       <CardContent>
-        <ProfileSetupStep1Form userId={user.uid} />
+        <ProfileSetupStep1Form userId={user.id || user.uid!} /> 
       </CardContent>
     </Card>
   );

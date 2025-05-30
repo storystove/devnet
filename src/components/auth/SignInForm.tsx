@@ -1,12 +1,13 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+// import { useRouter } from "next/navigation"; // No longer directly used for navigation here
+// import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth"; // Firebase removed
+// import { auth } from "@/lib/firebase"; // Firebase removed
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -21,17 +22,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useAuth } from "@/providers/AuthProvider"; // Use new AuthProvider
+
+const API_BASE_URL = 'https://devnet-apis-auth.onrender.com';
 
 const formSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  password: z.string().min(1, { message: "Password is required." }), // Adjusted min for general API
 });
 
 export function SignInForm() {
-  const router = useRouter();
+  // const router = useRouter(); // Now handled by AuthProvider
   const { toast } = useToast();
+  const { signIn } = useAuth(); // Get signIn from new AuthProvider
   const [isLoading, setIsLoading] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false); // Keep for UI consistency
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -44,9 +49,9 @@ export function SignInForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, values.email, values.password);
+      await signIn(values); // Call API signIn
       toast({ title: "Signed in successfully!" });
-      router.push("/");
+      // Navigation is handled by AuthProvider or router.push("/") in signIn
     } catch (error: any) {
       console.error("Sign in error:", error);
       toast({
@@ -59,23 +64,12 @@ export function SignInForm() {
     }
   }
 
-  async function handleGoogleSignIn() {
+  function handleGoogleSignIn() {
     setIsGoogleLoading(true);
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-      toast({ title: "Signed in with Google successfully!" });
-      router.push("/");
-    } catch (error: any) {
-      console.error("Google sign in error:", error);
-      toast({
-        title: "Google Sign In Failed",
-        description: error.message || "An unexpected error occurred.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGoogleLoading(false);
-    }
+    // Redirect to the backend endpoint for Google OAuth
+    window.location.href = `${API_BASE_URL}/api/auth/google`;
+    // Backend will handle the OAuth flow and redirect back to the app
+    // The callback page will handle token storage.
   }
 
   return (

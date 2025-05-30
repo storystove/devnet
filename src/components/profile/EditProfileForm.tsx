@@ -16,20 +16,19 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/providers/AuthProvider";
+import { Card, CardContent, CardDescription as ShadCNCardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/providers/AuthProvider"; // Use new AuthProvider
 import { useToast } from "@/hooks/use-toast";
 import { TagInput } from "@/components/shared/TagInput";
 import { useState, useEffect, useRef } from "react";
-import { Loader2, Save, FileUp, Palette } from "lucide-react"; // Added Palette
+import { Loader2, Save, FileUp, Palette } from "lucide-react";
 import type { UserProfile } from "@/types";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase";
-import { updateProfile as updateAuthProfile } from "firebase/auth";
-import { uploadImagePlaceholder } from "@/lib/imageUploader";
-import { Separator } from "@/components/ui/separator"; // Added Separator
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Added RadioGroup
-import { useTheme } from "@/providers/ThemeProvider"; // Added useTheme
+// Firebase imports removed
+// import { updateProfile as updateAuthProfile } from "firebase/auth"; // Firebase Auth specific
+// import { uploadImagePlaceholder } from "@/lib/imageUploader"; // No longer using this generic one for avatars
+import { Separator } from "@/components/ui/separator";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useTheme } from "@/providers/ThemeProvider";
 
 const profileFormSchema = z.object({
   displayName: z.string().min(2, "Display name must be at least 2 characters.").max(50),
@@ -43,24 +42,24 @@ type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 const parseExternalLinks = (text: string | undefined): UserProfile["externalLinks"] => {
   if (!text?.trim()) return [];
-  return text.split('\n').map(line => {
+  return text.split('\\n').map(line => {
     const parts = line.split(' - ');
     return { name: parts[0]?.trim() || "", url: parts[1]?.trim() || "" };
-  }).filter(link => link.name && link.url);
+  }).filter(link => link.name && link.url && /^https?:\/\//.test(link.url));
 };
 
 const formatExternalLinks = (links: UserProfile["externalLinks"] | undefined): string => {
   if (!links || links.length === 0) return "";
-  return links.map(link => `${link.name} - ${link.url}`).join('\n');
+  return links.map(link => `${link.name} - ${link.url}`).join('\\n');
 };
 
 
 export function EditProfileForm() {
-  const { user: firebaseAuthUser, loading: authLoading } = useAuth();
+  const { user: currentUser, loading: authLoading, updateProfile, uploadAvatar, fetchCurrentUser } = useAuth(); // Use new AuthProvider methods
   const { toast } = useToast();
-  const { theme, setTheme } = useTheme(); // Added theme state
+  const { theme, setTheme } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingProfile, setIsFetchingProfile] = useState(true);
+  const [isFetchingProfile, setIsFetchingProfile] = useState(true); // Renamed from firebaseAuthUser
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null | undefined>(null);
@@ -78,125 +77,121 @@ export function EditProfileForm() {
   });
 
   useEffect(() => {
-    if (firebaseAuthUser && !authLoading) {
+    if (currentUser && !authLoading) {
       setIsFetchingProfile(true);
-      const fetchProfile = async () => {
-        const userRef = doc(db, "users", firebaseAuthUser.uid);
-        const docSnap = await getDoc(userRef);
-        if (docSnap.exists()) {
-          const profileData = docSnap.data() as UserProfile;
-          form.reset({
-            displayName: profileData.displayName || firebaseAuthUser.displayName || "",
-            bio: profileData.bio || "",
-            skills: profileData.skills || [],
-            preferredLanguages: profileData.preferredLanguages || [],
-            externalLinksText: formatExternalLinks(profileData.externalLinks),
-          });
-          setCurrentAvatarUrl(profileData.avatarUrl || firebaseAuthUser.photoURL);
-        } else {
-           form.reset({
-            displayName: firebaseAuthUser.displayName || "",
-          });
-          setCurrentAvatarUrl(firebaseAuthUser.photoURL);
-          toast({ title: "Profile not found", description: "Creating a new profile entry for you.", variant: "default" });
-        }
-        setIsFetchingProfile(false);
-      };
-      fetchProfile();
+      // User data now comes from AuthProvider's user state, which is fetched from API
+      form.reset({
+        displayName: currentUser.displayName || "",
+        bio: currentUser.bio || "",
+        skills: currentUser.skills || [],
+        preferredLanguages: currentUser.preferredLanguages || [],
+        externalLinksText: formatExternalLinks(currentUser.externalLinks),
+      });
+      setCurrentAvatarUrl(currentUser.avatarUrl || currentUser.photoURL); // photoURL for compatibility
+      setIsFetchingProfile(false);
+    } else if (!currentUser && !authLoading) {
+      // Handle case where user is not logged in but tries to access edit page (should be protected by layout/router)
+      setIsFetchingProfile(false);
+       toast({ title: "Not Authenticated", description: "Please sign in to edit your profile.", variant: "destructive" });
     }
-  }, [firebaseAuthUser, authLoading, form, toast]);
+  }, [currentUser, authLoading, form, toast]);
 
   const handleAvatarFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
-      setSelectedAvatarFile(event.target.files[0]);
+      const file = event.target.files[0];
+      setSelectedAvatarFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setCurrentAvatarUrl(reader.result as string);
+        setCurrentAvatarUrl(reader.result as string); // Show local preview
       };
-      reader.readAsDataURL(event.target.files[0]);
+      reader.readAsDataURL(file);
     } else {
       setSelectedAvatarFile(null);
-      setCurrentAvatarUrl(firebaseAuthUser?.photoURL || (form.getValues() as any).avatarUrl);
+      setCurrentAvatarUrl(currentUser?.avatarUrl || currentUser?.photoURL); // Revert to original
     }
   };
 
   async function onSubmit(data: ProfileFormValues) {
-    if (!firebaseAuthUser) {
+    if (!currentUser) {
       toast({ title: "You must be signed in to edit your profile.", variant: "destructive" });
       return;
     }
     setIsLoading(true);
     
-    let newAvatarUrl: string | null | undefined = currentAvatarUrl;
+    let newAvatarUploadedUrl: string | undefined = undefined;
 
     if (selectedAvatarFile) {
       try {
-        newAvatarUrl = await uploadImagePlaceholder(selectedAvatarFile);
+        const uploadResponse = await uploadAvatar(selectedAvatarFile); // Use new uploadAvatar method
+        if (uploadResponse?.avatarUrl) {
+          newAvatarUploadedUrl = uploadResponse.avatarUrl;
+        } else {
+          // Avatar upload failed, but toast is shown by uploadAvatar.
+          // Decide if you want to proceed with other profile updates or stop.
+          // For now, we'll let profile update attempt without new avatar if upload failed.
+        }
       } catch (error: any) {
-        console.error("Avatar upload error:", error);
-        toast({
-          title: "Avatar Upload Failed",
-          description: getErrorMessage(error, "Could not upload the avatar."),
-          variant: "destructive",
-        });
+        // Error already toasted by uploadAvatar
         setIsLoading(false);
-        return;
+        return; // Stop if avatar upload itself threw a critical error
       }
     }
 
     const externalLinks = parseExternalLinks(data.externalLinksText);
+    // Validate parsed links (basic check)
+    if (data.externalLinksText && data.externalLinksText.trim() !== "" && externalLinks.length === 0) {
+        toast({ title: "Invalid Links Format", description: "Please ensure links are 'Name - URL' and URLs are valid.", variant: "destructive" });
+        setIsLoading(false);
+        return;
+    }
+    if (externalLinks.some(link => !link.url.startsWith('http'))) {
+        toast({ title: "Invalid URL", description: "All external links must start with http:// or https://.", variant: "destructive" });
+        setIsLoading(false);
+        return;
+    }
+
     const profileUpdateData: Partial<UserProfile> = {
       displayName: data.displayName,
-      avatarUrl: newAvatarUrl,
       bio: data.bio,
       skills: data.skills,
       preferredLanguages: data.preferredLanguages,
       externalLinks: externalLinks,
-      updatedAt: serverTimestamp(),
+      // avatarUrl will be updated if newAvatarUploadedUrl is set
     };
+    
+    if (newAvatarUploadedUrl) {
+        profileUpdateData.avatarUrl = newAvatarUploadedUrl;
+    }
+
 
     try {
-      if (auth.currentUser) {
-         await updateAuthProfile(auth.currentUser, {
-            displayName: data.displayName,
-            photoURL: newAvatarUrl, 
-        });
-      }
-
-      const userRef = doc(db, "users", firebaseAuthUser.uid);
-      await updateDoc(userRef, profileUpdateData);
-      
-      toast({ title: "Profile updated!", description: "Your changes have been saved." });
+      await updateProfile(profileUpdateData); // Use new updateProfile method
+      // Toast for success is handled by updateProfile method
       setSelectedAvatarFile(null); 
       if(avatarInputRef.current) avatarInputRef.current.value = "";
+      // Optionally re-fetch current user to ensure local state is perfectly in sync
+      // await fetchCurrentUser(); // AuthProvider might already do this if updateProfile updates its internal user
     } catch (error: any) {
-        console.error("Error updating profile:", error);
-        toast({ title: "Update Failed", description: error.message || "Could not save profile.", variant: "destructive"})
+        // Error already toasted by updateProfile
+        console.error("Error in onSubmit after calling updateProfile:", error);
     } finally {
         setIsLoading(false);
     }
   }
 
-  function getErrorMessage(error: any, defaultMessage: string): string {
-    if (error instanceof Error) return error.message;
-    if (typeof error === 'string') return error;
-    if (error && typeof error.message === 'string') return error.message;
-    return defaultMessage;
-  }
-
   if (authLoading || isFetchingProfile) {
-      return <Card className="shadow-lg"><CardContent className="p-6 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></CardContent></Card>
+      return <Card className="shadow-lg"><CardContent className="p-6 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></CardContent></Card>;
   }
 
-  if (!firebaseAuthUser) {
-      return <Card className="shadow-lg"><CardContent className="p-6 text-center text-muted-foreground">Please sign in to edit your profile.</CardContent></Card>
+  if (!currentUser) { // Should be caught by layout, but as a safeguard
+      return <Card className="shadow-lg"><CardContent className="p-6 text-center text-muted-foreground">Please sign in to edit your profile.</CardContent></Card>;
   }
 
   return (
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle>Edit Your Profile</CardTitle>
-        <CardDescription>Keep your DevNet profile up-to-date.</CardDescription>
+        <ShadCNCardDescription>Keep your DevNet profile up-to-date.</ShadCNCardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -294,7 +289,7 @@ export function EditProfileForm() {
                         <FormItem>
                         <FormLabel>External Links (Optional)</FormLabel>
                         <FormControl>
-                            <Textarea placeholder="GitHub - https://github.com/username&#10;LinkedIn - https://linkedin.com/in/profile" className="min-h-[80px]" {...field} value={field.value || ''}/>
+                            <Textarea placeholder="GitHub - https://github.com/username\nLinkedIn - https://linkedin.com/in/profile" className="min-h-[80px]" {...field} value={field.value || ''}/>
                         </FormControl>
                         <FormDescription>Enter one link per line in the format: Name - URL</FormDescription>
                         <FormMessage />
@@ -344,7 +339,7 @@ export function EditProfileForm() {
             
             <Separator />
 
-            <Button type="submit" className="w-full sm:w-auto" disabled={isLoading || isFetchingProfile}>
+            <Button type="submit" className="w-full sm:w-auto" disabled={isLoading || authLoading || isFetchingProfile}>
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Changes
             </Button>
@@ -354,4 +349,3 @@ export function EditProfileForm() {
     </Card>
   );
 }
-

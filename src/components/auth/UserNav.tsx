@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -13,22 +14,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/providers/AuthProvider";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+// import { signOut as firebaseSignOut } from "firebase/auth"; // Firebase removed
+// import { auth } from "@/lib/firebase"; // Firebase removed
 import { LogOut, User, Settings, UserPlus, LogIn } from "lucide-react";
-import { useRouter } from "next/navigation";
+// import { useRouter } from "next/navigation"; // Handled by AuthProvider
 import { useToast } from "@/hooks/use-toast";
 
 export function UserNav() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading, signOut } = useAuth(); // Get signOut from new AuthProvider
+  // const router = useRouter(); // Handled by AuthProvider
   const { toast } = useToast();
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
-      toast({ title: "Signed out successfully." });
-      router.push("/signin");
+      await signOut(); // Call API signOut
+      // Toast is handled by signOut in AuthProvider if successful
     } catch (error) {
       console.error("Sign out error:", error);
       toast({ title: "Error signing out.", variant: "destructive" });
@@ -55,16 +55,18 @@ export function UserNav() {
       </div>
     );
   }
-
+  
+  // User details now come from the API-hydrated user object in AuthProvider
   const userDisplayName = user.displayName || user.email?.split('@')[0] || "User";
   const userInitials = userDisplayName?.charAt(0).toUpperCase();
+  const userAvatarUrl = user.photoURL || user.avatarUrl; // Prefer photoURL from Firebase-like structure, fallback to avatarUrl
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
           <Avatar className="h-8 w-8">
-            <AvatarImage src={user.photoURL || undefined} alt={userDisplayName || ""} />
+            <AvatarImage src={userAvatarUrl || undefined} alt={userDisplayName || ""} />
             <AvatarFallback>{userInitials}</AvatarFallback>
           </Avatar>
         </Button>
@@ -83,7 +85,8 @@ export function UserNav() {
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
-            <Link href={`/profile/${user.uid}`}>
+            {/* Ensure user.id or user.uid is available for the profile link */}
+            <Link href={`/profile/${user.id || user.uid}`}>
               <User className="mr-2 h-4 w-4" />
               <span>Profile</span>
             </Link>

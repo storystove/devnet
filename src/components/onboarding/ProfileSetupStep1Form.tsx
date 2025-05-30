@@ -19,8 +19,9 @@ import { TagInput } from "@/components/shared/TagInput";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { Loader2, ArrowRight } from "lucide-react";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+// import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore"; // Firestore directly
+// import { db } from "@/lib/firebase"; // Firestore directly
+import { useAuth } from "@/providers/AuthProvider"; // For updateProfile method
 import type { UserProfile } from "@/types";
 import { useRouter } from "next/navigation";
 
@@ -32,14 +33,15 @@ const profileStep1Schema = z.object({
 type ProfileStep1FormValues = z.infer<typeof profileStep1Schema>;
 
 interface ProfileSetupStep1FormProps {
-  userId: string;
+  userId: string; // Still useful for clarity, though current user from useAuth will be the one updated
 }
 
 export function ProfileSetupStep1Form({ userId }: ProfileSetupStep1FormProps) {
   const { toast } = useToast();
   const router = useRouter();
+  const { user: currentUser, updateProfile: apiUpdateProfile, loading: authLoading } = useAuth(); // Use API method
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(true);
+  // const [isFetching, setIsFetching] = useState(true); // Data comes from currentUser now
 
   const form = useForm<ProfileStep1FormValues>({
     resolver: zodResolver(profileStep1Schema),
@@ -50,48 +52,40 @@ export function ProfileSetupStep1Form({ userId }: ProfileSetupStep1FormProps) {
   });
 
   useEffect(() => {
-    const fetchProfileData = async () => {
-      setIsFetching(true);
-      try {
-        const userRef = doc(db, "users", userId);
-        const docSnap = await getDoc(userRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data() as UserProfile;
-          form.reset({
-            bio: data.bio || "",
-            skills: data.skills || [],
-          });
-        }
-      } catch (error) {
-        console.error("Error fetching profile data for step 1:", error);
-        toast({ title: "Error", description: "Could not load existing profile data.", variant: "destructive" });
-      } finally {
-        setIsFetching(false);
-      }
-    };
-    fetchProfileData();
-  }, [userId, form, toast]);
+    if (currentUser) {
+      form.reset({
+        bio: currentUser.bio || "",
+        skills: currentUser.skills || [],
+      });
+    }
+  }, [currentUser, form]);
 
   async function onSubmit(data: ProfileStep1FormValues) {
     setIsLoading(true);
     try {
-      const userRef = doc(db, "users", userId);
-      await updateDoc(userRef, {
+      const updateData: Partial<UserProfile> = {
         bio: data.bio || "",
         skills: data.skills || [],
-        updatedAt: serverTimestamp(),
-      });
-      toast({ title: "Step 1 Complete!", description: "Let's move to the next step." });
-      router.push("/profile-setup/step2");
+        // profileSetupCompleted will be set to true only at the end of step 2
+      };
+      
+      const updatedUser = await apiUpdateProfile(updateData); // Call API to update
+      if (updatedUser) {
+        toast({ title: "Step 1 Complete!", description: "Let's move to the next step." });
+        router.push("/profile-setup/step2");
+      } else {
+        // Toast for failure is handled by apiUpdateProfile in AuthProvider
+      }
     } catch (error: any) {
-      console.error("Error updating profile (Step 1):", error);
-      toast({ title: "Update Failed", description: error.message || "Could not save details for step 1.", variant: "destructive" });
+      console.error("Error updating profile (Step 1 API):", error);
+      // Toast is likely handled by apiUpdateProfile or AuthProvider globally
+      // toast({ title: "Update Failed", description: error.message || "Could not save details for step 1.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   }
 
-  if (isFetching) {
+  if (authLoading && !currentUser) { // Show loader if auth is loading and there's no user yet for form prefill
     return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
@@ -138,7 +132,7 @@ export function ProfileSetupStep1Form({ userId }: ProfileSetupStep1FormProps) {
         />
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading || authLoading}>
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Next"}
             {!isLoading && <ArrowRight className="ml-2 h-4 w-4" />}
           </Button>

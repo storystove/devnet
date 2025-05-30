@@ -5,10 +5,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, updateProfile, UserCredential } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
-import { doc, setDoc, serverTimestamp, getDoc } from "firebase/firestore";
+// import { useRouter } from "next/navigation"; // Handled by AuthProvider
+// Firebase imports removed
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -23,7 +21,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
-import type { UserProfile } from "@/types";
+import { useAuth } from "@/providers/AuthProvider"; // Use new AuthProvider
+// import type { UserProfile } from "@/types"; // No longer needed here as API call handles profile creation
+
+const API_BASE_URL = 'https://devnet-apis-auth.onrender.com';
 
 const formSchema = z.object({
   displayName: z.string().min(2, { message: "Display name must be at least 2 characters." }),
@@ -32,8 +33,9 @@ const formSchema = z.object({
 });
 
 export function SignUpForm() {
-  const router = useRouter();
+  // const router = useRouter(); // Handled by AuthProvider
   const { toast } = useToast();
+  const { signUp } = useAuth(); // Get signUp from new AuthProvider
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -46,53 +48,17 @@ export function SignUpForm() {
     },
   });
 
-  const createUserProfileDocument = async (userCredential: UserCredential, additionalData?: Partial<UserProfile>) => {
-    if (!userCredential.user) return;
-    const userRef = doc(db, "users", userCredential.user.uid);
-    
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) {
-      const { displayName, email, photoURL } = userCredential.user;
-      const profileData: UserProfile = {
-        id: userCredential.user.uid,
-        displayName: additionalData?.displayName || displayName,
-        email: email,
-        avatarUrl: additionalData?.avatarUrl || photoURL,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        bio: "",
-        skills: [],
-        preferredLanguages: [],
-        externalLinks: [],
-        followerCount: 0,
-        followingCount: 0,
-        joinedStartups: [],
-        profileSetupCompleted: false, // Initialize profile setup as incomplete
-        ...additionalData,
-      };
-      try {
-        await setDoc(userRef, profileData);
-      } catch (error) {
-        console.error("Error creating user profile document:", error);
-        toast({
-          title: "Profile Creation Failed",
-          description: "Could not save your profile information.",
-          variant: "destructive",
-        });
-      }
-    }
-  };
+  // createUserProfileDocument is no longer needed as API handles profile creation
+  // const createUserProfileDocument = async (...) => { ... }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-      await updateProfile(userCredential.user, { displayName: values.displayName });
-      await createUserProfileDocument(userCredential, { displayName: values.displayName });
-
+      // API expects username, email, password. Map displayName to username if needed by API.
+      // For this example, assuming API /api/signup takes { displayName, email, password }
+      await signUp(values);
       toast({ title: "Account created successfully!" });
-      router.push("/profile-setup"); // Redirect to profile setup
+      // Navigation to /profile-setup handled by AuthProvider
     } catch (error: any) {
       console.error("Sign up error:", error);
       toast({
@@ -105,32 +71,12 @@ export function SignUpForm() {
     }
   }
 
-  async function handleGoogleSignIn() {
+  function handleGoogleSignIn() {
     setIsGoogleLoading(true);
-    const provider = new GoogleAuthProvider();
-    try {
-      const userCredential = await signInWithPopup(auth, provider);
-      // Check if user profile already exists, if so, don't reset profileSetupCompleted
-      const userRef = doc(db, "users", userCredential.user.uid);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists() && userSnap.data()?.profileSetupCompleted) {
-         await createUserProfileDocument(userCredential); // Will merge/update if exists
-         router.push("/"); // User already completed setup
-      } else {
-        await createUserProfileDocument(userCredential, { profileSetupCompleted: false });
-        router.push("/profile-setup"); // Redirect to profile setup for new Google sign-in or incomplete setup
-      }
-      toast({ title: "Signed up with Google successfully!" });
-    } catch (error: any) {
-      console.error("Google sign up error:", error);
-      toast({
-        title: "Google Sign Up Failed",
-        description: error.message || "An unexpected error occurred.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGoogleLoading(false);
-    }
+    // Redirect to the backend endpoint for Google OAuth
+    window.location.href = `${API_BASE_URL}/api/auth/google`;
+    // Backend will handle the OAuth flow and redirect back to the app
+    // The callback page will handle token storage.
   }
 
   return (
