@@ -1,3 +1,4 @@
+
 // src/lib/apiClient.ts
 const API_BASE_URL = 'https://devnet-apis-auth.onrender.com';
 
@@ -14,7 +15,6 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     if (token) {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
     } else if (endpoint !== '/api/signin' && endpoint !== '/api/signup' && !endpoint.startsWith('/api/auth/google')) {
-      // Optionally, you could throw an error here or handle redirection if auth is required but no token found
       console.warn('Auth token not found for authenticated request to', endpoint);
     }
   }
@@ -31,8 +31,15 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     config.body = JSON.stringify(options.body);
   }
 
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+  } catch (networkError: any) {
+    // This catches network errors (e.g., DNS resolution failure, server not reachable)
+    console.error('API Network Error:', networkError.message, 'for endpoint:', endpoint);
+    throw new Error(`Network error: Could not connect to the server. Please check your internet connection and try again. (${networkError.message})`);
+  }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
 
   if (!response.ok) {
     let errorData;
@@ -41,15 +48,20 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     } catch (e) {
       errorData = { message: response.statusText };
     }
-    console.error('API Error:', response.status, errorData);
-    throw new Error(errorData?.message || `API request failed: ${response.status}`);
+    console.error('API Error:', response.status, errorData, 'for endpoint:', endpoint);
+    throw new Error(errorData?.message || `API request failed: ${response.status} ${response.statusText}`);
   }
 
   if (response.status === 204 || response.headers.get("content-length") === "0") { // Handle No Content
     return undefined as T; 
   }
   
-  return response.json() as Promise<T>;
+  try {
+    return await response.json() as Promise<T>;
+  } catch (jsonError: any) {
+    console.error('API JSON Parsing Error:', jsonError.message, 'for endpoint:', endpoint, 'Response status:', response.status);
+    throw new Error(`Failed to parse server response. (${jsonError.message})`);
+  }
 }
 
 export const apiClient = {

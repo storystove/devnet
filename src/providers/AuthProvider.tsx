@@ -58,6 +58,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // or refactor components to expect the new API user structure.
         };
         setUser(apiUser);
+        setError(null); // Clear previous errors on successful fetch
       } catch (err: any) {
         console.error("Failed to fetch current user from API or token invalid:", err.message);
         setUser(null);
@@ -67,20 +68,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } else {
       setUser(null); // No token, no user
     }
-    setLoading(false);
+    if (showLoading) setLoading(false);
   }, []);
 
   useEffect(() => {
     fetchCurrentUser(true); // Fetch user on initial load
   }, [fetchCurrentUser]);
 
-  // Notifications check would need to be adapted if API provides unread counts
-  // useEffect(() => {
-  //   if (user && !loading && !initialNotificationCheckDone) {
-  //     // ... logic to fetch notifications from API ...
-  //     // setInitialNotificationCheckDone(true);
-  //   }
-  // }, [user, loading, initialNotificationCheckDone, toast]);
 
   const signIn = async (credentials: any) => {
     setLoading(true);
@@ -99,9 +93,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(apiUser);
       router.push("/"); // Redirect to home or dashboard
     } catch (err: any) {
+      console.error("AuthProvider signIn error:", err);
       setError(err);
       setUser(null);
-      throw err; // Re-throw for form to handle
+      // Ensure the error message from apiClient (if it's a network error) is propagated
+      throw new Error(err.message || "Sign in failed. Please check your credentials or network connection.");
     } finally {
       setLoading(false);
     }
@@ -196,7 +192,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
 
-  if (loading && !user) { // Show loading skeleton only on initial load and if no user yet
+  if (loading && !user && !error) { // Show loading skeleton only on initial load and if no user yet, and no critical error
     return (
       <div className="flex h-screen w-screen items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -207,6 +203,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       </div>
     );
   }
+  
+  // If there was a critical error during initial load (e.g., API completely unreachable)
+  if (error && !user && loading) { // Check loading as well to ensure it's an initial load error
+     return (
+      <div className="flex h-screen w-screen items-center justify-center">
+        <div className="p-4 bg-destructive/10 text-destructive-foreground border border-destructive rounded-md text-center">
+          <h3 className="text-lg font-semibold">Application Error</h3>
+          <p className="text-sm">{error.message || "Could not connect to the application services."}</p>
+          <p className="text-xs mt-2">Please try refreshing the page or check your internet connection.</p>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <AuthContext.Provider value={{ user, loading, error, signIn, signUp, signOut, updateProfile, uploadAvatar, fetchCurrentUser }}>
